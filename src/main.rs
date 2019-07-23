@@ -4,10 +4,11 @@ use std::io::prelude::*;
 use std::net::{TcpListener, TcpStream};
 
 const BUFFER_SIZE: usize = 128;
+const NUM_THREADS: usize = 4;
 
 fn main() {
     let listener = TcpListener::bind("127.0.0.1:3000").unwrap();
-    let pool = ThreadPool::new(4);
+    let pool = ThreadPool::new(NUM_THREADS);
     for stream in listener.incoming() {
         pool.execute(move || {
             handle_connection(stream.unwrap());
