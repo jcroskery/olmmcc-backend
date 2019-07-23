@@ -1,28 +1,44 @@
-extern crate hyper;
-use hyper::rt::Future;
-use hyper::service::service_fn_ok;
-use hyper::{Body, Request, Response, Server};
+use threadpool::ThreadPool;
 
-const PHRASE: &str = "Hello, World!";
+use std::io::prelude::*;
+use std::net::{TcpListener, TcpStream};
 
-fn hello_world(_req: Request<Body>) -> Response<Body> {
-    Response::new(Body::from(PHRASE))
-}
+const BUFFER_SIZE: usize = 128;
 
 fn main() {
-    let addr = ([127, 0, 0, 1], 3000).into();
+    let listener = TcpListener::bind("127.0.0.1:3000").unwrap();
+    let pool = ThreadPool::new(4);
+    for stream in listener.incoming() {
+        pool.execute(move || {
+            handle_connection(stream.unwrap());
+        });
+    }
+}
+fn handle_connection(mut stream: TcpStream) {
+    let mut buffer: Vec<char> = Vec::new();
+    let mut eof = false;
+    while !eof {
+        let mut peek_buf = [0; BUFFER_SIZE + 1];
+        stream.peek(&mut peek_buf).unwrap();
+        if peek_buf[BUFFER_SIZE] == 0 {
+            eof = true;
+        }
 
-    // A `Service` is needed for every connection, so this
-    // creates one from our `hello_world` function.
-    let new_svc = || {
-        // service_fn_ok converts our function into a `Service`
-        service_fn_ok(hello_world)
-    };
+        let mut read_buf = [0; BUFFER_SIZE];
+        stream.read(&mut read_buf).unwrap();
+        for x in read_buf.into_iter() {
+            if *x == 0 {
+                eof = true;
+                break;
+            }
+            buffer.push(*x as char);
+        }
+    }
+    let request: String = buffer.iter().collect();
+    println!("{}", request);
 
-    let server = Server::bind(&addr)
-        .serve(new_svc)
-        .map_err(|e| eprintln!("server error: {}", e));
+    let response = "HTTP/1.1 200 OK\r\n\r\nHello, world!";
 
-    // Run this server for... forever!
-    hyper::rt::run(server);
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
 }
