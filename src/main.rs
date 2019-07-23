@@ -38,7 +38,7 @@ fn handle_connection(mut stream: TcpStream) {
     let request: String = buffer.iter().collect();
     println!("{}", request);
 
-    let response = "HTTP/1.1 200 OK\r\n\r\nHello, world!";
+    let response = "HTTP/1.1 200 OK\r\n\r\nHello, test!";
 
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
