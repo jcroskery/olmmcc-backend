@@ -45,8 +45,8 @@ fn handle_connection(mut stream: TcpStream) {
     }
     let request: String = buffer.iter().collect();
     println!("{}", request);
-    let mut response = "HTTP/1.1 405 Method Not Allowed\r\n\r\nThe OLMMCC api only supports POST."
-        .to_string();
+    //let mut response = "HTTP/1.1 405 Method Not Allowed\r\n\r\nThe OLMMCC api only supports POST.".to_string();
+    let mut response = request.clone();
     if request.contains("POST") {
         let mut split_at_post = request.split("POST ");
         split_at_post.next();
