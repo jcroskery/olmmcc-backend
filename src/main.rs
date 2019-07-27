@@ -43,9 +43,13 @@ fn handle_connection(mut stream: TcpStream) {
     let mut response = "HTTP/1.1 405 Method Not Allowed\r\n\r\nThe OLMMCC api only supports POST.".to_string();
     if parsed_request.method().iter().map(|x| {*x as char}).collect::<String>() == "POST" {
         let url = parsed_request.uri().iter().map(|x| {*x as char}).collect::<String>();
-        println!("{}", parsed_request.fields().iter().map(|x| {
+        let headers: Vec<String> = parsed_request.fields().iter().map(|x| {
             x.1.iter().map(|x| {*x as char}).collect::<String>()
-        }).collect::<String>());
+        }).collect();
+        let a = parsed_request.field(&http_header::data!("Content-Type")).unwrap().iter().map(|x| {*x as char}).collect::<String>();
+        println!("{:?}", 
+            a
+        );
         //let mut split_header_body = request.split("\r\n\r\n");
         //split_header_body.next();
         //let body = split_header_body.next().unwrap();
