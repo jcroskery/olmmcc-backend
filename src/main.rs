@@ -64,7 +64,7 @@ fn formulate_response(url: &str, body: &str) -> String {
                 .map(|row| {
                     let (_, text, _) = mysql::from_row::
                         <(i32, String, String)>(row.unwrap());
-                    text
+                    htmlescape::decode_html(&text).unwrap()
                 })
                 .collect(); 
             format!("HTTP/1.1 200 Ok\r\n\r\n{}", result[0].to_string())
