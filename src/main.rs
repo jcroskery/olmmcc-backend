@@ -60,7 +60,7 @@ fn formulate_response(url: &str, body: &str) -> String {
             builder.db_name(Some("olmmcc")).user(Some("justus")).pass(Some(""));
             let mut pool = mysql::Conn::new(builder).unwrap();
             let result: Vec<String> = pool
-                .prep_exec("SELECT * FROM pages where topnav_id=:a", params!("a" => body_sep[1]))
+                .prep_exec("SELECT * FROM pages where topnav_id=:a", params!("a" => "home"))
                 .unwrap()
                 .map(|row| {
                     let (_, text, _) = mysql::from_row::
