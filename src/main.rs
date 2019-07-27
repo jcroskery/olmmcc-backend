@@ -55,11 +55,12 @@ fn handle_connection(mut stream: TcpStream) {
 fn formulate_response(url: &str, body: &str) -> String {
     match url {
         "/get_page" => {
+            let body_sep: Vec<&str> = body.split("=").collect();
             let mut builder = mysql::OptsBuilder::new();
             builder.db_name(Some("olmmcc")).user(Some("justus")).pass(Some(""));
             let mut pool = mysql::Conn::new(builder).unwrap();
             let result: Vec<String> = pool
-                .prep_exec("SELECT * FROM pages where topnav_id=:a", params!("a" => "home"))
+                .prep_exec("SELECT * FROM pages where topnav_id=:a", params!("a" => body_sep[1]))
                 .unwrap()
                 .map(|row| {
                     let (_, text, _) = mysql::from_row::
