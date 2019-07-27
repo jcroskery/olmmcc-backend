@@ -7,13 +7,6 @@ use mysql::params;
 const BUFFER_SIZE: usize = 128;
 const NUM_THREADS: usize = 4;
 
-#[derive(serde::Serialize)]
-struct Page {
-    id: i32,
-    text: String,
-    topnav_id: String,
-}
-
 fn main() {
     let listener = TcpListener::bind("127.0.0.1:3000").unwrap();
     let pool = ThreadPool::new(NUM_THREADS);
@@ -45,8 +38,7 @@ fn handle_connection(mut stream: TcpStream) {
     }
     let request: String = buffer.iter().collect();
     println!("{}", request);
-    //let mut response = "HTTP/1.1 405 Method Not Allowed\r\n\r\nThe OLMMCC api only supports POST.".to_string();
-    let mut response = request.clone();
+    let mut response = "HTTP/1.1 405 Method Not Allowed\r\n\r\nThe OLMMCC api only supports POST.".to_string();
     if request.contains("POST") {
         let mut split_at_post = request.split("POST ");
         split_at_post.next();
@@ -66,17 +58,13 @@ fn formulate_response(url: &str, body: &str) -> String {
             let mut builder = mysql::OptsBuilder::new();
             builder.db_name(Some("olmmcc")).user(Some("justus")).pass(Some(""));
             let mut pool = mysql::Conn::new(builder).unwrap();
-            let result: Vec<serde_json::Value> = pool
+            let result: Vec<String> = pool
                 .prep_exec("SELECT * FROM pages where topnav_id=:a", params!("a" => "home"))
                 .unwrap()
                 .map(|row| {
-                    let (id, text, topnav_id) = mysql::from_row::
+                    let (_, text, _) = mysql::from_row::
                         <(i32, String, String)>(row.unwrap());
-                    serde_json::json!(Page {
-                        id,
-                        text,
-                        topnav_id
-                    })
+                    text
                 })
                 .collect(); 
             format!("HTTP/1.1 200 Ok\r\n\r\n{}", result[0].to_string())
