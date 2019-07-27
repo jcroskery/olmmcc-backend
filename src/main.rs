@@ -1,8 +1,10 @@
 use threadpool::ThreadPool;
+use core::convert::TryFrom;
 
 use std::io::prelude::*;
 use std::net::{TcpListener, TcpStream};
 use mysql::params;
+use http_header::RequestHeader;
 
 const BUFFER_SIZE: usize = 128;
 const NUM_THREADS: usize = 4;
@@ -17,7 +19,7 @@ fn main() {
     }
 }
 fn handle_connection(mut stream: TcpStream) {
-    let mut buffer: Vec<char> = Vec::new();
+    let mut buffer: Vec<u8> = Vec::new();
     let mut eof = false;
     while !eof {
         let mut peek_buf = [0; BUFFER_SIZE + 1];
@@ -33,21 +35,21 @@ fn handle_connection(mut stream: TcpStream) {
                 eof = true;
                 break;
             }
-            buffer.push(*x as char);
+            buffer.push(*x);
         }
     }
-    let request: String = buffer.iter().collect();
-    println!("{}", request);
+    let header = http_header::Header::parse(&buffer).unwrap();
+    let parsed_request = RequestHeader::try_from(header).unwrap();
     let mut response = "HTTP/1.1 405 Method Not Allowed\r\n\r\nThe OLMMCC api only supports POST.".to_string();
-    if request.contains("POST") {
-        let mut split_at_post = request.split("POST ");
-        split_at_post.next();
-        let url = split_at_post.next().unwrap()
-            .split_ascii_whitespace().next().unwrap();
-        let mut split_header_body = request.split("\r\n\r\n");
-        split_header_body.next();
-        let body = split_header_body.next().unwrap();
-        response = formulate_response(url, body);
+    if parsed_request.method().iter().map(|x| {*x as char}).collect::<String>() == "POST" {
+        let url = parsed_request.uri().iter().map(|x| {*x as char}).collect::<String>();
+        println!("{}", parsed_request.fields().iter().map(|x| {
+            x.1.iter().map(|x| {*x as char}).collect::<String>()
+        }).collect::<String>());
+        //let mut split_header_body = request.split("\r\n\r\n");
+        //split_header_body.next();
+        //let body = split_header_body.next().unwrap();
+        //response = formulate_response(url, body);
     }
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();

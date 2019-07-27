@@ -12,3 +12,4 @@ threadpool = "1.7.1"
 serde_json = "1.0.40"
 serde = { version = "1.0.97", features = ["derive"] }
 htmlescape = "0.3.1"
+http_header = "0.6.0"
