@@ -1,10 +1,9 @@
 use threadpool::ThreadPool;
-use core::convert::TryFrom;
+use mysql::params;
 
 use std::io::prelude::*;
 use std::net::{TcpListener, TcpStream};
-use mysql::params;
-use http_header::RequestHeader;
+use std::collections::HashMap;
 
 const BUFFER_SIZE: usize = 128;
 const NUM_THREADS: usize = 4;
@@ -38,41 +37,45 @@ fn handle_connection(mut stream: TcpStream) {
             buffer.push(*x);
         }
     }
-    let header = http_header::Header::parse(&buffer).unwrap();
-    let parsed_request = RequestHeader::try_from(header).unwrap();
-    let mut response = "HTTP/1.1 405 Method Not Allowed\r\n\r\nThe OLMMCC api only supports POST.".to_string();
-    if parsed_request.method().iter().map(|x| {*x as char}).collect::<String>() == "POST" {
-        let url = parsed_request.uri().iter().map(|x| {*x as char}).collect::<String>();
-        let headers: Vec<String> = parsed_request.fields().iter().map(|x| {
-            x.1.iter().map(|x| {*x as char}).collect::<String>()
-        }).collect();
-        let a = parsed_request.field(&http_header::data!("Content-Type")).unwrap().iter().map(|x| {*x as char}).collect::<String>();
-        println!("{:?}", 
-            a
-        );
-        //let mut split_header_body = request.split("\r\n\r\n");
-        //split_header_body.next();
-        //let body = split_header_body.next().unwrap();
-        //response = formulate_response(url, body);
+    let request = buffer.iter().map(|x| {*x as char}).collect::<String>();
+    let mut response = "HTTP/1.1 405 Method Not Allowed\r\n\r\nThe OLMMCC api only supports multipart/form-data.".to_string();
+    if request.contains("multipart/form-data") {
+        let url = request.split_ascii_whitespace().collect::<Vec<&str>>()[1];
+        let body = request.split("\r\n\r\n").skip(1).collect::<Vec<&str>>();
+        response = formulate_response(url, get_form_data(body));
     }
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
 }
-fn formulate_response(url: &str, body: &str) -> String {
+fn get_form_data(body: Vec<&str>) -> HashMap<&str, &str> {
+    let mut hash_map = HashMap::new();
+    for i in (0..(body.len() / 2)).map(|x| {x * 2}) {
+        hash_map.insert(
+            body[i].split("\"").collect::<Vec<&str>>()[1], 
+            body[i+1].split("\r\n").collect::<Vec<&str>>()[0],
+        );
+    }
+    hash_map
+}
+fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
     match url {
         "/get_page" => {
-            let body_sep: Vec<&str> = body.split("=").collect();
             let mut builder = mysql::OptsBuilder::new();
-            builder.db_name(Some("olmmcc")).user(Some("justus")).pass(Some(""));
+            builder
+                .db_name(Some("olmmcc"))
+                .user(Some("justus"))
+                .pass(Some(""));
             let mut pool = mysql::Conn::new(builder).unwrap();
             let result: Vec<String> = pool
-                .prep_exec("SELECT * FROM pages where topnav_id=:a", params!("a" => "home"))
+                .prep_exec(
+                    "SELECT * FROM pages where topnav_id=:a", 
+                    params!("a" => body.get("page").unwrap())
+                )
                 .unwrap()
                 .map(|row| {
                     let (_, text, _) = mysql::from_row::
                         <(i32, String, String)>(row.unwrap());
-                    //htmlescape::decode_html(&text).unwrap()
-                    body.to_string()
+                    htmlescape::decode_html(&text).unwrap()
                 })
                 .collect(); 
             format!("HTTP/1.1 200 Ok\r\n\r\n{}", result[0].to_string())
