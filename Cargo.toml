@@ -11,6 +11,8 @@ mysql = "16.0.2"
 threadpool = "1.7.1"
 serde_json = "1.0.40"
 htmlescape = "0.3.1"
+chrono = "0.4.7"
+mysql_common = "0.17.1"
 
 [dependencies.serde]
 version = "1.0.98"
