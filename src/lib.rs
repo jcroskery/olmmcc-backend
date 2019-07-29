@@ -62,6 +62,7 @@ fn ok(body: &str) -> String {
     format!("HTTP/1.1 200 Ok\r\n\r\n{}", body)
 }
 fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
+    println!("{}", url);
     match url {
         "/get_page" => get_page(body),
         "/get_songs" => get_songs(),
