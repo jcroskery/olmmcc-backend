@@ -1,9 +1,11 @@
 use mysql::params;
 use chrono::NaiveDate;
 use serde::Serialize;
+use serde_json::json;
 
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::fs;
 
 use crate::{get_mysql_conn, ok};
 
@@ -87,4 +89,14 @@ pub fn get_songs() -> String {
             ok("{\"title\": \"\"}")
         }
     }
+}
+
+pub fn get_image_list() -> String {
+    let paths: Vec<String> = fs::read_dir("/srv/http/images/").unwrap()
+        .map(|x| {x.unwrap().file_name().into_string().unwrap()})
+        .collect();
+    let json = json!({
+        "images" : paths
+    });
+    ok(&json.to_string())
 }

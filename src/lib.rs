@@ -65,6 +65,7 @@ fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
     match url {
         "/get_page" => get_page(body),
         "/get_songs" => get_songs(),
+        "/get_image_list" => get_image_list(),
         _ => format!("HTTP/1.1 404 Not Found\r\n\r\nThe provided url {} could not be resolved.", url),
     }
 }
