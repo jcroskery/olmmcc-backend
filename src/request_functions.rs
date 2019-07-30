@@ -9,19 +9,29 @@ use std::fs;
 
 use crate::{get_mysql_conn, ok};
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct Song {
     name: String,
     link: String,
     role: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct SongArticle {
     title: String,
     text: String,
     expiry: i64,
     songs: Vec<Song>
+}
+
+#[derive(Debug, Serialize)]
+struct CalendarEvent {
+    id: i64,
+    title: String,
+    date: String,
+    start_time: String,
+    end_time: String,
+    notes: String,
 }
 
 pub fn get_page(body: HashMap<&str, &str>) -> String {
@@ -99,4 +109,27 @@ pub fn get_image_list() -> String {
         "images" : paths
     });
     ok(&json.to_string())
+}
+
+pub fn get_calendar_events(body: HashMap<&str, &str>) -> String {
+    let mut conn = get_mysql_conn();
+    let result: Vec<CalendarEvent> = conn
+        .prep_exec(
+            "SELECT * FROM calendar WHERE date LIKE :a", 
+            params!("a" => body.get("year_month").unwrap())
+        ).unwrap()
+        .map(|row| {
+            let (id, title, date, start_time, end_time, notes) = 
+                mysql::from_row::<(_, _, NaiveDate, _, _, _)>(row.unwrap());
+            CalendarEvent {
+                id,
+                title,
+                date: date.format("%Y-%m-%d").to_string(),
+                start_time,
+                end_time,
+                notes,
+            }
+        })
+        .collect();
+    ok(&serde_json::to_string(&result).unwrap())
 }
