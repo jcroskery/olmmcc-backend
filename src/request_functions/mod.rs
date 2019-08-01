@@ -2,6 +2,7 @@ use mysql::params;
 use chrono::NaiveDate;
 use serde::Serialize;
 use serde_json::json;
+use htmlescape::decode_html;
 
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -41,9 +42,10 @@ struct CalendarEvent {
 }
 
 pub fn get_page(body: HashMap<&str, &str>) -> String {
-    ok(&mysql::from_value::<String>
-        (get_row("pages", "topnav_id", body.get("page").unwrap())[0][1].clone())
-    )
+    ok(&decode_html(
+        &mysql::from_value::<String>
+            (get_row("pages", "topnav_id", body.get("page").unwrap())[0][1].clone())
+    ).unwrap())
 }
 pub fn get_songs() -> String {
     let mut conn = get_mysql_conn();
