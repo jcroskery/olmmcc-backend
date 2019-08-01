@@ -1,11 +1,12 @@
 use mysql::{Conn, OptsBuilder};
+use serde_json::json;
+use scrypt::{ScryptParams, scrypt_simple};
 
 use std::collections::HashMap;
 use std::io::prelude::*;
 use std::net::TcpStream;
 
 mod request_functions;
-
 use request_functions::*;
 
 const BUFFER_SIZE: usize = 128;
@@ -42,7 +43,7 @@ pub fn handle_connection(mut stream: TcpStream) {
 }
 fn get_form_data(body: Vec<&str>) -> HashMap<&str, &str> {
     let mut hash_map = HashMap::new();
-    for i in (0..(body.len() / 2)).map(|x| {x * 2}) {
+    for i in 0..(body.len() - 1) {
         hash_map.insert(
             body[i].split("\"").collect::<Vec<&str>>()[1], 
             body[i+1].split("\r\n").collect::<Vec<&str>>()[0],
@@ -67,6 +68,16 @@ fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
         "/get_songs" => get_songs(),
         "/get_image_list" => get_image_list(),
         "/get_calendar_events" => get_calendar_events(body),
+        "/signup" => signup(body),
         _ => format!("HTTP/1.1 404 Not Found\r\n\r\nThe provided url {} could not be resolved.", url),
     }
+}
+fn message(message: &str) -> String {
+    ok(&json!({"message" : message}).to_string())
+}
+fn hash(to_hash: &str) -> String {
+    scrypt_simple(
+        to_hash, 
+        &ScryptParams::new(12, 8, 1).unwrap()
+    ).unwrap()
 }

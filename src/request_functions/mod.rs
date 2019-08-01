@@ -7,7 +7,13 @@ use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::fs;
 
-use crate::{get_mysql_conn, ok};
+mod account_validation;
+use account_validation::*;
+
+mod database_functions;
+use database_functions::*;
+
+use crate::{get_mysql_conn, ok, message, hash};
 
 #[derive(Serialize)]
 struct Song {
@@ -24,7 +30,7 @@ struct SongArticle {
     songs: Vec<Song>
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct CalendarEvent {
     id: i64,
     title: String,
@@ -35,22 +41,10 @@ struct CalendarEvent {
 }
 
 pub fn get_page(body: HashMap<&str, &str>) -> String {
-    let mut conn = get_mysql_conn();
-    let result: Vec<String> = conn
-        .prep_exec(
-            "SELECT * FROM pages where topnav_id=:a", 
-            params!("a" => body.get("page").unwrap())
-        )
-        .unwrap()
-        .map(|row| {
-            let (_, text, _) = mysql::from_row::
-                <(i32, String, String)>(row.unwrap());
-            htmlescape::decode_html(&text).unwrap()
-        })
-        .collect();
-    ok(&result[0])
+    ok(&mysql::from_value::<String>
+        (get_row("pages", "topnav_id", body.get("page").unwrap())[0][1].clone())
+    )
 }
-
 pub fn get_songs() -> String {
     let mut conn = get_mysql_conn();
     let mut expiry = 0;
@@ -132,4 +126,27 @@ pub fn get_calendar_events(body: HashMap<&str, &str>) -> String {
         })
         .collect();
     ok(&serde_json::to_string(&result).unwrap())
+}
+
+pub fn signup(body: HashMap<&str, &str>) -> String {
+    let email = body.get("email").unwrap().to_lowercase();
+    let username = body.get("username").unwrap();
+    let password_one = body.get("password1").unwrap();
+    let password_two = body.get("password2").unwrap();
+    if let Some(t) = check_passwords(password_one, password_two) { return message(t); }
+    if let Some(t) = check_email(&email) { return message(t); }
+    if let Some(t) = check_username(username) { return message(t); }
+    let mut conn = get_mysql_conn();
+    conn.prep_exec(
+        "INSERT INTO users (email, username, password, verified, admin, subscription_policy, invalid_email) VALUES (:email, :username, :password, 0, 0, 1, 0)", 
+        params!(
+            "email" => email,
+            "username" => username,
+            "password" => hash(password_one),
+        )
+    ).unwrap();
+    let json = json!({
+        "url" : "/login"
+    });
+    ok(&json.to_string())
 }
