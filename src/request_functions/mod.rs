@@ -97,23 +97,16 @@ pub fn get_image_list() -> String {
 }
 
 pub fn get_calendar_events(body: HashMap<&str, &str>) -> String {
-    let mut conn = get_mysql_conn();
-    let result: Vec<CalendarEvent> = conn
-        .prep_exec(
-            "SELECT * FROM calendar WHERE date LIKE :a",
-            params!("a" => body.get("year_month").unwrap()),
-        )
-        .unwrap()
-        .map(|row| {
-            let (id, title, date, start_time, end_time, notes) =
-                mysql::from_row::<(_, _, NaiveDate, _, _, _)>(row.unwrap());
+    let result: Vec<CalendarEvent> = get_like("calendar", "date", body.get("year_month").unwrap())
+        .iter()
+        .map(|x| {
             CalendarEvent {
-                id,
-                title,
-                date: date.format("%Y-%m-%d").to_string(),
-                start_time,
-                end_time,
-                notes,
+                id: from_value(x[0].clone()),
+                title: from_value(x[1].clone()),
+                date: from_value::<NaiveDate>(x[2].clone()).format("%Y-%m-%d").to_string(),
+                start_time: from_value(x[3].clone()),
+                end_time: from_value(x[4].clone()),
+                notes: from_value(x[5].clone()),
             }
         })
         .collect();
