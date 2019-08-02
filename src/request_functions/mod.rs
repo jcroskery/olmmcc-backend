@@ -1,12 +1,12 @@
-use mysql::params;
 use chrono::NaiveDate;
+use htmlescape::decode_html;
+use mysql::{from_value, params};
 use serde::Serialize;
 use serde_json::json;
-use htmlescape::decode_html;
 
 use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::fs;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 mod account_validation;
 use account_validation::*;
@@ -14,7 +14,7 @@ use account_validation::*;
 mod database_functions;
 use database_functions::*;
 
-use crate::{get_mysql_conn, ok, message, hash};
+use crate::{get_mysql_conn, hash, message, ok};
 
 #[derive(Serialize)]
 struct Song {
@@ -27,8 +27,7 @@ struct Song {
 struct SongArticle {
     title: String,
     text: String,
-    expiry: i64,
-    songs: Vec<Song>
+    songs: Vec<Song>,
 }
 
 #[derive(Serialize)]
@@ -42,68 +41,58 @@ struct CalendarEvent {
 }
 
 pub fn get_page(body: HashMap<&str, &str>) -> String {
-    ok(&decode_html(
-        &mysql::from_value::<String>
-            (get_row("pages", "topnav_id", body.get("page").unwrap())[0][1].clone())
-    ).unwrap())
+    ok(&decode_html(&from_value::<String>(
+        get_like("pages", "topnav_id", body.get("page").unwrap())[0][1].clone(),
+    ))
+    .unwrap())
 }
 pub fn get_songs() -> String {
-    let mut conn = get_mysql_conn();
     let mut expiry = 0;
-    let current_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-    let mut result: Vec<SongArticle> = conn
-        .prep_exec("SELECT * FROM articles", ()).unwrap()
-        .map(|row| {
-            let (_, title, text, expiry) = mysql::from_row::<(i32, _, _, NaiveDate)>(row.unwrap());
-            SongArticle {
-                title,
-                text,
-                expiry: expiry.and_hms(0, 0, 0).timestamp(),
-                songs: Vec::new(),
-            }
-        })
-        .filter(|article| {
-            if article.expiry > expiry && current_time < article.expiry as u64 {
-                expiry = article.expiry;
+    let current_time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let mut article: Vec<SongArticle> = get_all_rows("articles")
+        .iter()
+        .filter(|row| {
+            let this_expiry = from_value::<NaiveDate>(row[3].clone())
+                .and_hms(0, 0, 0)
+                .timestamp();
+            if this_expiry > expiry && current_time < this_expiry as u64 {
+                expiry = this_expiry;
                 true
             } else {
                 false
             }
         })
+        .map(|x| SongArticle {
+            title: from_value(x[1].clone()),
+            text: from_value(x[2].clone()),
+            songs: Vec::new(),
+        })
         .collect();
-    match result.pop() {
+    match article.pop() {
         Some(mut t) => {
-            let result: Vec<Song> = conn
-                .prep_exec(
-                    "SELECT * FROM songs WHERE article LIKE :a", 
-                    params!("a" => &t.title)
-                ).unwrap()
-                .map(|row| {
-                    let (_, name, link, role, _) = 
-                        mysql::from_row::<(i32, _, _, _, String)>(row.unwrap());
-                    Song {
-                        name,
-                        link,
-                        role,
-                    }
+            t.songs = get_like("songs", "article", &t.title)
+                .into_iter()
+                .map(|x| Song {
+                    name: from_value(x[1].clone()),
+                    link: from_value(x[2].clone()),
+                    role: from_value(x[3].clone()),
                 })
                 .collect();
-            t.songs = result;
             ok(&serde_json::to_string(&t).unwrap())
-        },
-        None => {
-            ok("{\"title\": \"\"}")
         }
+        None => ok(&json!({"title" : ""}).to_string()),
     }
 }
 
 pub fn get_image_list() -> String {
-    let paths: Vec<String> = fs::read_dir("/srv/http/images/").unwrap()
-        .map(|x| {x.unwrap().file_name().into_string().unwrap()})
+    let paths: Vec<String> = fs::read_dir("/srv/http/images/")
+        .unwrap()
+        .map(|x| x.unwrap().file_name().into_string().unwrap())
         .collect();
-    let json = json!({
-        "images" : paths
-    });
+    let json = json!({ "images": paths });
     ok(&json.to_string())
 }
 
@@ -111,11 +100,12 @@ pub fn get_calendar_events(body: HashMap<&str, &str>) -> String {
     let mut conn = get_mysql_conn();
     let result: Vec<CalendarEvent> = conn
         .prep_exec(
-            "SELECT * FROM calendar WHERE date LIKE :a", 
-            params!("a" => body.get("year_month").unwrap())
-        ).unwrap()
+            "SELECT * FROM calendar WHERE date LIKE :a",
+            params!("a" => body.get("year_month").unwrap()),
+        )
+        .unwrap()
         .map(|row| {
-            let (id, title, date, start_time, end_time, notes) = 
+            let (id, title, date, start_time, end_time, notes) =
                 mysql::from_row::<(_, _, NaiveDate, _, _, _)>(row.unwrap());
             CalendarEvent {
                 id,
@@ -135,9 +125,15 @@ pub fn signup(body: HashMap<&str, &str>) -> String {
     let username = body.get("username").unwrap();
     let password_one = body.get("password1").unwrap();
     let password_two = body.get("password2").unwrap();
-    if let Some(t) = check_passwords(password_one, password_two) { return message(t); }
-    if let Some(t) = check_email(&email) { return message(t); }
-    if let Some(t) = check_username(username) { return message(t); }
+    if let Some(t) = check_passwords(password_one, password_two) {
+        return message(t);
+    }
+    if let Some(t) = check_email(&email) {
+        return message(t);
+    }
+    if let Some(t) = check_username(username) {
+        return message(t);
+    }
     let mut conn = get_mysql_conn();
     conn.prep_exec(
         "INSERT INTO users (email, username, password, verified, admin, subscription_policy, invalid_email) VALUES (:email, :username, :password, 0, 0, 1, 0)", 

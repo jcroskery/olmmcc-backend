@@ -11,7 +11,7 @@ pub fn check_passwords(password_one: &str, password_two: &str) -> Option<&'stati
 }
 pub fn check_email(email: &str) -> Option<&str> {
     if email.len() <= 64 {
-        if let None = super::get_row("users", "email", email).get(0) {
+        if let None = super::get_like("users", "email", email).get(0) {
             None
         } else {
             Some("Sorry, your email address has already been registered. Please use a different email address or log in with your account.")
@@ -22,7 +22,7 @@ pub fn check_email(email: &str) -> Option<&str> {
 }
 pub fn check_username(username: &str) -> Option<&'static str> {
     if username.len() <= 32 && username.len() >= 4 {
-        if let None = super::get_row("users", "username", username).get(0) {
+        if let None = super::get_like("users", "username", username).get(0) {
             None
         } else {
             Some("Sorry, this username has already been taken. Please select another.")

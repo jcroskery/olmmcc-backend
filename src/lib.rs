@@ -1,6 +1,6 @@
 use mysql::{Conn, OptsBuilder};
+use scrypt::{scrypt_simple, ScryptParams};
 use serde_json::json;
-use scrypt::{ScryptParams, scrypt_simple};
 
 use std::collections::HashMap;
 use std::io::prelude::*;
@@ -31,8 +31,10 @@ pub fn handle_connection(mut stream: TcpStream) {
             buffer.push(*x);
         }
     }
-    let request = buffer.iter().map(|x| {*x as char}).collect::<String>();
-    let mut response = "HTTP/1.1 405 Method Not Allowed\r\n\r\nThe OLMMCC api only supports multipart/form-data.".to_string();
+    let request = buffer.iter().map(|x| *x as char).collect::<String>();
+    let mut response =
+        "HTTP/1.1 405 Method Not Allowed\r\n\r\nThe OLMMCC api only supports multipart/form-data."
+            .to_string();
     if request.contains("multipart/form-data") {
         let url = request.split_ascii_whitespace().collect::<Vec<&str>>()[1];
         let body = request.split("\r\n\r\n").skip(1).collect::<Vec<&str>>();
@@ -45,8 +47,8 @@ fn get_form_data(body: Vec<&str>) -> HashMap<&str, &str> {
     let mut hash_map = HashMap::new();
     for i in 0..(body.len() - 1) {
         hash_map.insert(
-            body[i].split("\"").collect::<Vec<&str>>()[1], 
-            body[i+1].split("\r\n").collect::<Vec<&str>>()[0],
+            body[i].split("\"").collect::<Vec<&str>>()[1],
+            body[i + 1].split("\r\n").collect::<Vec<&str>>()[0],
         );
     }
     hash_map
@@ -69,15 +71,15 @@ fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
         "/get_image_list" => get_image_list(),
         "/get_calendar_events" => get_calendar_events(body),
         "/signup" => signup(body),
-        _ => format!("HTTP/1.1 404 Not Found\r\n\r\nThe provided url {} could not be resolved.", url),
+        _ => format!(
+            "HTTP/1.1 404 Not Found\r\n\r\nThe provided url {} could not be resolved.",
+            url
+        ),
     }
 }
 fn message(message: &str) -> String {
-    ok(&json!({"message" : message}).to_string())
+    ok(&json!({ "message": message }).to_string())
 }
 fn hash(to_hash: &str) -> String {
-    scrypt_simple(
-        to_hash, 
-        &ScryptParams::new(12, 8, 1).unwrap()
-    ).unwrap()
+    scrypt_simple(to_hash, &ScryptParams::new(12, 8, 1).unwrap()).unwrap()
 }
