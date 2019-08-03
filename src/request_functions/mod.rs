@@ -1,6 +1,6 @@
 use chrono::NaiveDate;
 use htmlescape::decode_html;
-use mysql::{from_value, params};
+use mysql::from_value;
 use serde::Serialize;
 use serde_json::json;
 
@@ -14,7 +14,7 @@ use account_validation::*;
 mod database_functions;
 use database_functions::*;
 
-use crate::{get_mysql_conn, hash, message, ok};
+use crate::{hash, message, ok};
 
 #[derive(Serialize)]
 struct Song {
@@ -99,15 +99,15 @@ pub fn get_image_list() -> String {
 pub fn get_calendar_events(body: HashMap<&str, &str>) -> String {
     let result: Vec<CalendarEvent> = get_like("calendar", "date", body.get("year_month").unwrap())
         .iter()
-        .map(|x| {
-            CalendarEvent {
-                id: from_value(x[0].clone()),
-                title: from_value(x[1].clone()),
-                date: from_value::<NaiveDate>(x[2].clone()).format("%Y-%m-%d").to_string(),
-                start_time: from_value(x[3].clone()),
-                end_time: from_value(x[4].clone()),
-                notes: from_value(x[5].clone()),
-            }
+        .map(|x| CalendarEvent {
+            id: from_value(x[0].clone()),
+            title: from_value(x[1].clone()),
+            date: from_value::<NaiveDate>(x[2].clone())
+                .format("%Y-%m-%d")
+                .to_string(),
+            start_time: from_value(x[3].clone()),
+            end_time: from_value(x[4].clone()),
+            notes: from_value(x[5].clone()),
         })
         .collect();
     ok(&serde_json::to_string(&result).unwrap())
@@ -127,15 +127,11 @@ pub fn signup(body: HashMap<&str, &str>) -> String {
     if let Some(t) = check_username(username) {
         return message(t);
     }
-    let mut conn = get_mysql_conn();
-    conn.prep_exec(
-        "INSERT INTO users (email, username, password, verified, admin, subscription_policy, invalid_email) VALUES (:email, :username, :password, 0, 0, 1, 0)", 
-        params!(
-            "email" => email,
-            "username" => username,
-            "password" => hash(password_one),
-        )
-    ).unwrap();
+    insert_row(
+        "users", 
+        vec!("email", "username", "password", "verified", "admin", "subscription_policy", "invalid_email"), 
+        vec!(&email, username, &hash(password_one), "0", "0", "1", "0")
+    );
     let json = json!({
         "url" : "/login"
     });

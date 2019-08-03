@@ -1,4 +1,3 @@
-use mysql::{Conn, OptsBuilder};
 use scrypt::{scrypt_simple, ScryptParams};
 use serde_json::json;
 
@@ -52,14 +51,6 @@ fn get_form_data(body: Vec<&str>) -> HashMap<&str, &str> {
         );
     }
     hash_map
-}
-fn get_mysql_conn() -> Conn {
-    let mut builder = OptsBuilder::new();
-    builder
-        .db_name(Some("olmmcc"))
-        .user(Some("justus"))
-        .pass(Some(""));
-    Conn::new(builder).unwrap()
 }
 fn ok(body: &str) -> String {
     format!("HTTP/1.1 200 Ok\r\n\r\n{}", body)
