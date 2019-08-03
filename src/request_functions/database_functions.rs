@@ -1,4 +1,4 @@
-use mysql::{params, Params, Value, OptsBuilder, Conn};
+use mysql::{params, Conn, OptsBuilder, Params, Value};
 
 pub fn get_like(table: &str, column_name: &str, column_value: &str) -> Vec<Vec<Value>> {
     mysql_statement(
@@ -30,7 +30,12 @@ pub fn insert_row(table: &str, titles: Vec<&str>, contents: Vec<&str>) {
         values.push((titles[i], Value::from(contents[i])));
     }
     mysql_statement(
-        format!("INSERT INTO {} ({}) VALUES (:{})", table, titles.join(", "), titles.join(", :")),
-        Params::from(values)
+        format!(
+            "INSERT INTO {} ({}) VALUES (:{})",
+            table,
+            titles.join(", "),
+            titles.join(", :")
+        ),
+        Params::from(values),
     );
 }

@@ -128,9 +128,17 @@ pub fn signup(body: HashMap<&str, &str>) -> String {
         return message(t);
     }
     insert_row(
-        "users", 
-        vec!("email", "username", "password", "verified", "admin", "subscription_policy", "invalid_email"), 
-        vec!(&email, username, &hash(password_one), "0", "0", "1", "0")
+        "users",
+        vec![
+            "email",
+            "username",
+            "password",
+            "verified",
+            "admin",
+            "subscription_policy",
+            "invalid_email",
+        ],
+        vec![&email, username, &hash(password_one), "0", "0", "1", "0"],
     );
     let json = json!({
         "url" : "/login"
