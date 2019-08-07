@@ -40,6 +40,13 @@ struct CalendarEvent {
     notes: String,
 }
 
+struct User {
+    email: String,
+    username: String,
+
+    id: i64,
+}
+
 pub fn get_page(body: HashMap<&str, &str>) -> String {
     ok(&decode_html(&from_value::<String>(
         get_like("pages", "topnav_id", body.get("page").unwrap())[0][1].clone(),
@@ -144,4 +151,8 @@ pub fn signup(body: HashMap<&str, &str>) -> String {
         "url" : "/login"
     });
     ok(&json.to_string())
+}
+
+pub fn login(body: HashMap<&str, &str>) -> String {
+    ok("f")
 }
