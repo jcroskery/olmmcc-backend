@@ -1,4 +1,4 @@
-use scrypt::{scrypt_simple, ScryptParams};
+use scrypt::{scrypt_check, scrypt_simple, ScryptParams};
 use serde_json::json;
 
 use std::collections::HashMap;
@@ -62,6 +62,7 @@ fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
         "/get_image_list" => get_image_list(),
         "/get_calendar_events" => get_calendar_events(body),
         "/signup" => signup(body),
+        "/login" => login(body),
         _ => format!(
             "HTTP/1.1 404 Not Found\r\n\r\nThe provided url {} could not be resolved.",
             url
@@ -73,4 +74,7 @@ fn message(message: &str) -> String {
 }
 fn hash(to_hash: &str) -> String {
     scrypt_simple(to_hash, &ScryptParams::new(12, 8, 1).unwrap()).unwrap()
+}
+fn hash_match(password: &str, hash: &str) -> bool {
+    scrypt_check(password, hash).is_ok()
 }

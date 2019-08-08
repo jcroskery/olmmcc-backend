@@ -3,6 +3,7 @@ use htmlescape::decode_html;
 use mysql::from_value;
 use serde::Serialize;
 use serde_json::json;
+use session::Session;
 
 use std::collections::HashMap;
 use std::fs;
@@ -14,7 +15,7 @@ use account_validation::*;
 mod database_functions;
 use database_functions::*;
 
-use crate::{hash, message, ok};
+use crate::{hash, hash_match, message, ok};
 
 #[derive(Serialize)]
 struct Song {
@@ -38,13 +39,6 @@ struct CalendarEvent {
     start_time: String,
     end_time: String,
     notes: String,
-}
-
-struct User {
-    email: String,
-    username: String,
-
-    id: i64,
 }
 
 pub fn get_page(body: HashMap<&str, &str>) -> String {
@@ -154,5 +148,41 @@ pub fn signup(body: HashMap<&str, &str>) -> String {
 }
 
 pub fn login(body: HashMap<&str, &str>) -> String {
-    ok("f")
+    let email = &body.get("email").unwrap().to_lowercase();
+    let iter = get_like("users", "email", email);
+    if let Some(user) = iter.iter().next() {
+        if hash_match(
+            body.get("password").unwrap(),
+            &from_value::<String>(user[2].clone()),
+        ) {
+            if from_value::<i32>(user[4].clone()) == 1 {
+                let mut session = Session::new();
+                session
+                    .set("id", &from_value::<i32>(user[3].clone()).to_string())
+                    .set("verified", "1")
+                    .set(
+                        "invalid_email",
+                        &from_value::<i32>(user[7].clone()).to_string(),
+                    )
+                    .set("email", email)
+                    .set("username", &from_value::<String>(user[1].clone()))
+                    .set("admin", &from_value::<i32>(user[5].clone()).to_string())
+                    .set(
+                        "subscription_policy",
+                        &from_value::<i32>(user[6].clone()).to_string(),
+                    )
+                    .set("notification", "Successfully logged in!");
+                ok(&json!({"url" : "/", "session" : session.get_id()}).to_string())
+            } else {
+                ok(
+                    &json!({"url" : "", "message" : "This account has not been verified."})
+                        .to_string(),
+                )
+            }
+        } else {
+            ok(&json!({"url" : "", "message" : "Wrong password, please try again."}).to_string())
+        }
+    } else {
+        ok(&json!({"url" : "", "message" : "Wrong email, please try again."}).to_string())
+    }
 }

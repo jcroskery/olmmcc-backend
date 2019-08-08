@@ -15,6 +15,7 @@ htmlescape = "0.3.1"
 chrono = "0.4.7"
 mysql_common = "0.17.1"
 scrypt = "0.2.0"
+session = { git = "https://github.com/Somebody62/session" }
 
 [dependencies.serde]
 version = "1.0.98"
