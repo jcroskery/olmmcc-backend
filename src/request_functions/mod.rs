@@ -148,30 +148,30 @@ pub fn signup(body: HashMap<&str, &str>) -> String {
 }
 
 pub fn login(body: HashMap<&str, &str>) -> String {
-    let email = &body.get("email").unwrap().to_lowercase();
-    let iter = get_like("users", "email", email);
+    let email = body.get("email").unwrap().to_lowercase();
+    let iter = get_like("users", "email", &email);
     if let Some(user) = iter.iter().next() {
         if hash_match(
             body.get("password").unwrap(),
             &from_value::<String>(user[2].clone()),
         ) {
             if from_value::<i32>(user[4].clone()) == 1 {
-                let mut session = Session::new();
+                let mut session = Session::new(30, 100);
                 session
-                    .set("id", &from_value::<i32>(user[3].clone()).to_string())
-                    .set("verified", "1")
+                    .set("id", from_value::<i32>(user[3].clone()).to_string())
+                    .set("verified", "1".to_string())
                     .set(
                         "invalid_email",
-                        &from_value::<i32>(user[7].clone()).to_string(),
+                        from_value::<i32>(user[7].clone()).to_string(),
                     )
                     .set("email", email)
-                    .set("username", &from_value::<String>(user[1].clone()))
-                    .set("admin", &from_value::<i32>(user[5].clone()).to_string())
+                    .set("username", from_value(user[1].clone()))
+                    .set("admin", from_value::<i32>(user[5].clone()).to_string())
                     .set(
                         "subscription_policy",
-                        &from_value::<i32>(user[6].clone()).to_string(),
+                        from_value::<i32>(user[6].clone()).to_string(),
                     )
-                    .set("notification", "Successfully logged in!");
+                    .set("notification", "Successfully logged in!".to_string());
                 ok(&json!({"url" : "/", "session" : session.get_id()}).to_string())
             } else {
                 ok(
