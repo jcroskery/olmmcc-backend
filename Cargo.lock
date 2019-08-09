@@ -701,7 +701,7 @@ dependencies = [
 [[package]]
 name = "session"
 version = "0.1.0"
-source = "git+https://github.com/Somebody62/session#add800218ec4a6c308e0f19d30f01e919187c7cc"
+source = "git+https://github.com/Somebody62/session#2bdaf8f1bcead934758bebc986d289cda55cff06"
 dependencies = [
  "mysql 16.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",

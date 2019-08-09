@@ -43,7 +43,7 @@ struct CalendarEvent {
 
 pub fn get_page(body: HashMap<&str, &str>) -> String {
     ok(&decode_html(&from_value::<String>(
-        get_like("pages", "topnav_id", body.get("page").unwrap())[0][1].clone(),
+        get_like("pages", "topnav_id", body["page"])[0][1].clone(),
     ))
     .unwrap())
 }
@@ -98,7 +98,7 @@ pub fn get_image_list() -> String {
 }
 
 pub fn get_calendar_events(body: HashMap<&str, &str>) -> String {
-    let result: Vec<CalendarEvent> = get_like("calendar", "date", body.get("year_month").unwrap())
+    let result: Vec<CalendarEvent> = get_like("calendar", "date", body["year_month"])
         .iter()
         .map(|x| CalendarEvent {
             id: from_value(x[0].clone()),
@@ -115,10 +115,10 @@ pub fn get_calendar_events(body: HashMap<&str, &str>) -> String {
 }
 
 pub fn signup(body: HashMap<&str, &str>) -> String {
-    let email = body.get("email").unwrap().to_lowercase();
-    let username = body.get("username").unwrap();
-    let password_one = body.get("password1").unwrap();
-    let password_two = body.get("password2").unwrap();
+    let email = body["email"].to_lowercase();
+    let username = body["username"];
+    let password_one = body["password1"];
+    let password_two = body["password2"];
     if let Some(t) = check_passwords(password_one, password_two) {
         return message(t);
     }
@@ -148,13 +148,10 @@ pub fn signup(body: HashMap<&str, &str>) -> String {
 }
 
 pub fn login(body: HashMap<&str, &str>) -> String {
-    let email = body.get("email").unwrap().to_lowercase();
+    let email = body["email"].to_lowercase();
     let iter = get_like("users", "email", &email);
     if let Some(user) = iter.iter().next() {
-        if hash_match(
-            body.get("password").unwrap(),
-            &from_value::<String>(user[2].clone()),
-        ) {
+        if hash_match(body["password"], &from_value::<String>(user[2].clone())) {
             if from_value::<i32>(user[4].clone()) == 1 {
                 let mut session = Session::new(30, 100);
                 session
@@ -170,9 +167,8 @@ pub fn login(body: HashMap<&str, &str>) -> String {
                     .set(
                         "subscription_policy",
                         from_value::<i32>(user[6].clone()).to_string(),
-                    )
-                    .set("notification", "Successfully logged in!".to_string());
-                ok(&json!({"url" : "/", "session" : session.get_id()}).to_string())
+                    );
+                ok(&json!({"url" : "/", "session" : session.get_id(), "message" : "Successfully logged in!"}).to_string())
             } else {
                 ok(
                     &json!({"url" : "", "message" : "This account has not been verified."})
@@ -185,4 +181,26 @@ pub fn login(body: HashMap<&str, &str>) -> String {
     } else {
         ok(&json!({"url" : "", "message" : "Wrong email, please try again."}).to_string())
     }
+}
+
+pub fn get_username(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]) {
+        if session.get("verified").unwrap() == "1" {
+            ok(
+                &json!({"session" : "active", "username" : session.get("username").unwrap()})
+                    .to_string(),
+            )
+        } else {
+            ok(&json!({"session" : "active", "username" : ""}).to_string())
+        }
+    } else {
+        ok(&json!({"session" : "none"}).to_string())
+    }
+}
+
+pub fn kill_session(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]) {
+        session.delete();
+    }
+    ok("")
 }

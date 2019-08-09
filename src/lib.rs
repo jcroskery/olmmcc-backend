@@ -63,6 +63,8 @@ fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
         "/get_calendar_events" => get_calendar_events(body),
         "/signup" => signup(body),
         "/login" => login(body),
+        "/kill_session" => kill_session(body),
+        "/get_username" => get_username(body),
         _ => format!(
             "HTTP/1.1 404 Not Found\r\n\r\nThe provided url {} could not be resolved.",
             url
