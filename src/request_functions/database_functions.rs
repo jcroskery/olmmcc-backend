@@ -39,3 +39,10 @@ pub fn insert_row(table: &str, titles: Vec<&str>, contents: Vec<&str>) {
         Params::from(values),
     );
 }
+
+pub fn change_row(table: &str, where_name: &str, wherevalue: &str, name: &str, value: &str) {
+    mysql_statement(
+        format!("UPDATE {} SET {} = :wherevalue WHERE {} = :value", table, where_name, name), 
+        params!(wherevalue, value)
+    );
+}

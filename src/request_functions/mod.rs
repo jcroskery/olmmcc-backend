@@ -2,7 +2,7 @@ use chrono::NaiveDate;
 use htmlescape::decode_html;
 use mysql::from_value;
 use serde::Serialize;
-use serde_json::json;
+use serde_json::{json, Map, Value};
 use session::Session;
 
 use std::collections::HashMap;
@@ -149,58 +149,106 @@ pub fn signup(body: HashMap<&str, &str>) -> String {
 
 pub fn login(body: HashMap<&str, &str>) -> String {
     let email = body["email"].to_lowercase();
-    let iter = get_like("users", "email", &email);
-    if let Some(user) = iter.iter().next() {
-        if hash_match(body["password"], &from_value::<String>(user[2].clone())) {
-            if from_value::<i32>(user[4].clone()) == 1 {
-                let mut session = Session::new(30, 100);
-                session
-                    .set("id", from_value::<i32>(user[3].clone()).to_string())
-                    .set("verified", "1".to_string())
-                    .set(
-                        "invalid_email",
-                        from_value::<i32>(user[7].clone()).to_string(),
-                    )
-                    .set("email", email)
-                    .set("username", from_value(user[1].clone()))
-                    .set("admin", from_value::<i32>(user[5].clone()).to_string())
-                    .set(
-                        "subscription_policy",
-                        from_value::<i32>(user[6].clone()).to_string(),
-                    );
-                ok(&json!({"url" : "/", "session" : session.get_id(), "message" : "Successfully logged in!"}).to_string())
-            } else {
-                ok(
-                    &json!({"url" : "", "message" : "This account has not been verified."})
-                        .to_string(),
-                )
-            }
-        } else {
-            ok(&json!({"url" : "", "message" : "Wrong password, please try again."}).to_string())
-        }
+    let mut session = Session::new(30, 100);
+    if let Some(message) = refresh_session(&mut session, email, Some(body["password"])) {
+        ok(&json!({"url" : "", "message" : message}).to_string())
     } else {
-        ok(&json!({"url" : "", "message" : "Wrong email, please try again."}).to_string())
+        ok(&json!({"url" : "/", "session" : session.get_id(), "message" : "Successfully logged in!"}).to_string())
     }
 }
 
-pub fn get_username(body: HashMap<&str, &str>) -> String {
-    if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("verified").unwrap() == "1" {
-            ok(
-                &json!({"session" : "active", "username" : session.get("username").unwrap()})
-                    .to_string(),
-            )
+pub fn refresh_session(
+    session: &mut Session,
+    email: String,
+    password: Option<&str>,
+) -> Option<&'static str> {
+    let users = get_like("users", "email", &email);
+    if let Some(user) = users.iter().next() {
+        if let Some(p) = password {
+            if !hash_match(p, &from_value::<String>(user[2].clone())) {
+                return Some("Wrong password, please try again.");
+            }
+        }
+        if from_value::<i32>(user[4].clone()) == 1 {
+            session
+                .set("id", from_value::<i32>(user[3].clone()).to_string())
+                .set("verified", "1".to_string())
+                .set(
+                    "invalid_email",
+                    from_value::<i32>(user[7].clone()).to_string(),
+                )
+                .set("email", email)
+                .set("username", from_value(user[1].clone()))
+                .set("admin", from_value::<i32>(user[5].clone()).to_string())
+                .set(
+                    "subscription_policy",
+                    from_value::<i32>(user[6].clone()).to_string(),
+                );
+            None
         } else {
-            ok(&json!({"session" : "active", "username" : ""}).to_string())
+            Some("This account has not been verified.")
         }
     } else {
-        ok(&json!({"session" : "none"}).to_string())
+        Some("Wrong email, please try again.")
     }
+}
+
+pub fn get_account(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]) {
+        if session.get("verified").unwrap() == "1" {
+            const ALLOWED_VARS: &[&str] = &["email", "username", "admin", "subscription_policy"];
+            let mut map = Map::new();
+            for var in ALLOWED_VARS {
+                if body["details"].contains(var) {
+                    map.insert(var.to_string(), Value::String(session.get(var).unwrap()));
+                }
+            }
+            return ok(&serde_json::to_string(&map).unwrap());
+        }
+    }
+    ok(&json!({"session" : "none"}).to_string())
 }
 
 pub fn kill_session(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         session.delete();
+    }
+    ok("")
+}
+
+pub fn change_password(body: HashMap<&str, &str>) -> String {
+    let mut session = Session::from_id(body["session"]).unwrap();
+    let password_hash = get_like("users", "email", &session.get("email").unwrap())
+        .iter()
+        .next()
+        .unwrap()[2]
+        .clone();
+    if hash_match(
+        body["current_password"],
+        &from_value::<String>(password_hash),
+    ) {
+        let password_one = body["password1"];
+        let password_two = body["password2"];
+        if let Some(t) = check_passwords(password_one, password_two) {
+            return message(t);
+        }
+        change_row(
+            "users",
+            "id",
+            &session.get("id").unwrap(),
+            "password",
+            &hash(password_one),
+        );
+        ok(&json!({"message" : "Your password was successfully changed!"}).to_string())
+    } else {
+        ok(&json!({"message" : "Wrong password, please try again."}).to_string())
+    }
+}
+
+pub fn refresh(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]) {
+        let email = session.get("email").unwrap();
+        refresh_session(&mut session, email, None);
     }
     ok("")
 }
