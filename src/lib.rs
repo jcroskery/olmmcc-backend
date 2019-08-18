@@ -55,6 +55,9 @@ fn get_form_data(body: Vec<&str>) -> HashMap<&str, &str> {
 fn ok(body: &str) -> String {
     format!("HTTP/1.1 200 Ok\r\n\r\n{}", body)
 }
+fn j_ok(body: serde_json::Value) -> String {
+    ok(&body.to_string())
+}
 fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
     match url {
         "/get_page" => get_page(body),
@@ -67,6 +70,7 @@ fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
         "/get_account" => get_account(body),
         "/change_password" => change_password(body),
         "/refresh" => refresh(body),
+        "/change_username" => change_username(body),
         _ => format!(
             "HTTP/1.1 404 Not Found\r\n\r\nThe provided url {} could not be resolved.",
             url

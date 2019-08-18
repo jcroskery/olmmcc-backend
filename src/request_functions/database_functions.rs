@@ -42,7 +42,7 @@ pub fn insert_row(table: &str, titles: Vec<&str>, contents: Vec<&str>) {
 
 pub fn change_row(table: &str, where_name: &str, wherevalue: &str, name: &str, value: &str) {
     mysql_statement(
-        format!("UPDATE {} SET {} = :wherevalue WHERE {} = :value", table, where_name, name), 
-        params!(wherevalue, value)
+        format!("UPDATE {} SET {} = :value WHERE {} = :wherevalue", table, name, where_name), 
+        params!(value, wherevalue)
     );
 }

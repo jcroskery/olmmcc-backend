@@ -15,7 +15,7 @@ use account_validation::*;
 mod database_functions;
 use database_functions::*;
 
-use crate::{hash, hash_match, message, ok};
+use crate::{hash, hash_match, j_ok, message, ok};
 
 #[derive(Serialize)]
 struct Song {
@@ -84,7 +84,7 @@ pub fn get_songs() -> String {
                 .collect();
             ok(&serde_json::to_string(&t).unwrap())
         }
-        None => ok(&json!({"title" : ""}).to_string()),
+        None => j_ok(json!({"title" : ""})),
     }
 }
 
@@ -93,8 +93,7 @@ pub fn get_image_list() -> String {
         .unwrap()
         .map(|x| x.unwrap().file_name().into_string().unwrap())
         .collect();
-    let json = json!({ "images": paths });
-    ok(&json.to_string())
+    j_ok(json!({ "images": paths }))
 }
 
 pub fn get_calendar_events(body: HashMap<&str, &str>) -> String {
@@ -141,32 +140,32 @@ pub fn signup(body: HashMap<&str, &str>) -> String {
         ],
         vec![&email, username, &hash(password_one), "0", "0", "1", "0"],
     );
-    let json = json!({
-        "url" : "/login"
-    });
-    ok(&json.to_string())
+    j_ok(json!({"url" : "/login"}))
 }
 
 pub fn login(body: HashMap<&str, &str>) -> String {
     let email = body["email"].to_lowercase();
     let mut session = Session::new(30, 100);
-    if let Some(message) = refresh_session(&mut session, email, Some(body["password"])) {
-        ok(&json!({"url" : "", "message" : message}).to_string())
+    if let Some(message) = refresh_session(&mut session, "email", email, Some(body["password"])) {
+        j_ok(json!({"url" : "", "message" : message}))
     } else {
-        ok(&json!({"url" : "/", "session" : session.get_id(), "message" : "Successfully logged in!"}).to_string())
+        j_ok(
+            json!({"url" : "/", "session" : session.get_id(), "message" : "Successfully logged in!"}),
+        )
     }
 }
 
 pub fn refresh_session(
     session: &mut Session,
-    email: String,
+    key: &str,
+    value: String,
     password: Option<&str>,
-) -> Option<&'static str> {
-    let users = get_like("users", "email", &email);
+) -> Option<String> {
+    let users = get_like("users", key, &value);
     if let Some(user) = users.iter().next() {
         if let Some(p) = password {
             if !hash_match(p, &from_value::<String>(user[2].clone())) {
-                return Some("Wrong password, please try again.");
+                return Some("Wrong password, please try again.".to_string());
             }
         }
         if from_value::<i32>(user[4].clone()) == 1 {
@@ -177,7 +176,7 @@ pub fn refresh_session(
                     "invalid_email",
                     from_value::<i32>(user[7].clone()).to_string(),
                 )
-                .set("email", email)
+                .set("email", from_value(user[0].clone()))
                 .set("username", from_value(user[1].clone()))
                 .set("admin", from_value::<i32>(user[5].clone()).to_string())
                 .set(
@@ -186,10 +185,10 @@ pub fn refresh_session(
                 );
             None
         } else {
-            Some("This account has not been verified.")
+            Some("This account has not been verified.".to_string())
         }
     } else {
-        Some("Wrong email, please try again.")
+        Some(format!("Wrong {}, please try again.", key))
     }
 }
 
@@ -206,7 +205,7 @@ pub fn get_account(body: HashMap<&str, &str>) -> String {
             return ok(&serde_json::to_string(&map).unwrap());
         }
     }
-    ok(&json!({"session" : "none"}).to_string())
+    j_ok(json!({"session" : "none"}))
 }
 
 pub fn kill_session(body: HashMap<&str, &str>) -> String {
@@ -239,16 +238,31 @@ pub fn change_password(body: HashMap<&str, &str>) -> String {
             "password",
             &hash(password_one),
         );
-        ok(&json!({"message" : "Your password was successfully changed!"}).to_string())
+        j_ok(json!({"message" : "Your password was successfully changed!"}))
     } else {
-        ok(&json!({"message" : "Wrong password, please try again."}).to_string())
+        j_ok(json!({"message" : "Wrong password, please try again."}))
     }
 }
 
 pub fn refresh(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
-        let email = session.get("email").unwrap();
-        refresh_session(&mut session, email, None);
+        let id = session.get("id").unwrap();
+        refresh_session(&mut session, "id", id, None);
     }
     ok("")
+}
+
+pub fn change_username(body: HashMap<&str, &str>) -> String {
+    let mut session = Session::from_id(body["session"]).unwrap();
+    if let Some(t) = check_username(body["username"]) {
+        return message(t);
+    }
+    change_row(
+        "users",
+        "id",
+        &session.get("id").unwrap(),
+        "username",
+        body["username"],
+    );
+    j_ok(json!({"message" : "Your username was successfully changed!"}))
 }
