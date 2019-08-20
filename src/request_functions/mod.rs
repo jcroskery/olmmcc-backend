@@ -155,7 +155,7 @@ pub fn login(body: HashMap<&str, &str>) -> String {
     }
 }
 
-pub fn refresh_session(
+fn refresh_session(
     session: &mut Session,
     key: &str,
     value: String,
@@ -265,4 +265,26 @@ pub fn change_username(body: HashMap<&str, &str>) -> String {
         body["username"],
     );
     j_ok(json!({"message" : "Your username was successfully changed!"}))
+}
+
+pub fn change_subscription(body: HashMap<&str, &str>) -> String {
+    const SUBSCRIPTION_MESSAGES: &[&str] = &[
+        "You are now unsubscribed from receiving emails.",
+        "You are now subscribed to receive emails.",
+        "You are now subscribed to receive emails and reminders.",
+    ];
+    let mut session = Session::from_id(body["session"]).unwrap();
+    if let Some(t) = check_subscription(body["subscription"]) {
+        return message(t);
+    }
+    change_row(
+        "users",
+        "id",
+        &session.get("id").unwrap(),
+        "subscription_policy",
+        body["subscription"],
+    );
+    j_ok(json!({
+        "message" : SUBSCRIPTION_MESSAGES[body["subscription"].parse::<usize>().unwrap()]
+    }))
 }
