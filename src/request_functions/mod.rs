@@ -288,3 +288,17 @@ pub fn change_subscription(body: HashMap<&str, &str>) -> String {
         "message" : SUBSCRIPTION_MESSAGES[body["subscription"].parse::<usize>().unwrap()]
     }))
 }
+
+pub fn change_email(body: HashMap<&str, &str>) -> String {
+    // An email needs to be added to the queue here
+    let mut session = Session::from_id(body["session"]).unwrap();
+    if session.get("verified").unwrap() == "1" {
+        if let Some(t) = check_email(body["email"]) {
+            return message(t);
+        }
+        let message = format!("An email containing an link to change your account email has been sent to {}. Please check your inbox, including the spam folder, for the link. It may take a few minutes to receive the email.", session.get("email").unwrap());
+        j_ok(json!({ "message": message }))
+    } else {
+        ok("")
+    }
+}
