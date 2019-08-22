@@ -302,3 +302,10 @@ pub fn change_email(body: HashMap<&str, &str>) -> String {
         ok("")
     }
 }
+
+pub fn delete_account(body: HashMap<&str, &str>) -> String {
+    // An email needs to be added to the queue here
+    let mut session = Session::from_id(body["session"]).unwrap();
+    let message = format!("An email containing an link to delete your OLMMCC account has been sent to {}. Please check your inbox, including the spam folder, for the link. It may take a few minutes to receive the email.", session.get("email").unwrap());
+    j_ok(json!({ "message": message }))
+}
