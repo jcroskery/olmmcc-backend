@@ -8,7 +8,23 @@ pub fn get_like(table: &str, column_name: &str, column_value: &str) -> Vec<Vec<V
 }
 
 pub fn get_all_rows(table: &str) -> Vec<Vec<Value>> {
-    mysql_statement(format!("SELECT * FROM {}", table), ())
+    let checked_table = check_table(table).unwrap();
+    mysql_statement(format!("SELECT * FROM {} ORDER BY id", checked_table), ())
+}
+
+fn check_table(table: &str) -> Option<&str> {
+    const ALLOWED_TABLES: &[&str] = &["pages", "articles", "calendar", "songs"];
+    for allowed_table in ALLOWED_TABLES {
+        if *allowed_table == table {
+            return Some(allowed_table);
+        }
+    }
+    None
+}
+
+pub fn get_column_details(table: &str) -> Vec<Vec<Value>> {
+    let checked_table = check_table(table).unwrap();
+    mysql_statement(format!("SHOW COLUMNS FROM {}", checked_table), ())
 }
 
 pub fn mysql_statement<T: Into<Params>>(request: String, params: T) -> Vec<Vec<Value>> {

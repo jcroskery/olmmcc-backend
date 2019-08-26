@@ -309,3 +309,49 @@ pub fn delete_account(body: HashMap<&str, &str>) -> String {
     let message = format!("An email containing an link to delete your OLMMCC account has been sent to {}. Please check your inbox, including the spam folder, for the link. It may take a few minutes to receive the email.", session.get("email").unwrap());
     j_ok(json!({ "message": message }))
 }
+
+pub fn get_database_columns(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]) {
+        if session.get("admin").unwrap() == "1" {
+            let mut details = Map::new();
+            for column in get_column_details(body["table"]) {
+                details.insert(
+                    from_value(column[0].clone()),
+                    serde_json::Value::String(from_value::<String>(column[1].clone())),
+                );
+            }
+            return ok(&serde_json::to_string(&details).unwrap());
+        }
+    }
+    ok("")
+}
+
+pub fn get_database(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]) {
+        if session.get("admin").unwrap() == "1" {
+            let mut processed_columns = Vec::new();
+            for column in get_column_details(body["table"]) {
+                let new_column = [from_value::<String>(column[0].clone()), from_value::<String>(column[1].clone())];
+                processed_columns.push(new_column);
+            }
+            let mut processed_rows = Vec::new();
+            for row in get_all_rows(body["table"]) {
+                let mut new_row = Vec::new();
+                for i in 0..row.len() {
+                    let column_type = &processed_columns[i][1];
+                    if column_type.contains("date") {
+                        new_row.push(from_value::<NaiveDate>(row[i].clone()).to_string())
+                    } else if column_type.contains("int") {
+                        new_row.push(from_value::<i32>(row[i].clone()).to_string())
+                    } else {
+                        new_row.push(from_value::<String>(row[i].clone()).to_string());
+                    }
+                }
+                processed_rows.push(new_row);
+            }
+            println!("{}", json!({"columns" : processed_columns, "rows" : processed_rows}));
+            return j_ok(json!({"columns" : processed_columns, "rows" : processed_rows}));
+        }
+    }
+    ok("")
+}
