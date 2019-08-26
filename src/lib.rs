@@ -46,7 +46,10 @@ fn get_form_data(body: Vec<&str>) -> HashMap<&str, &str> {
     let mut hash_map = HashMap::new();
     for i in 0..(body.len() - 1) {
         hash_map.insert(
-            body[i].split("name=\"").collect::<Vec<&str>>()[1].split("\"").next().unwrap(),
+            body[i].split("name=\"").collect::<Vec<&str>>()[1]
+                .split("\"")
+                .next()
+                .unwrap(),
             body[i + 1].split("\r\n").collect::<Vec<&str>>()[0],
         );
     }
@@ -75,6 +78,7 @@ fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
         "/change_email" => change_email(body),
         "/delete_account" => delete_account(body),
         "/get_database" => get_database(body),
+        "/get_row_titles" => get_row_titles(body),
         _ => format!(
             "HTTP/1.1 404 Not Found\r\n\r\nThe provided url {} could not be resolved.",
             url

@@ -310,38 +310,22 @@ pub fn delete_account(body: HashMap<&str, &str>) -> String {
     j_ok(json!({ "message": message }))
 }
 
-pub fn get_database_columns(body: HashMap<&str, &str>) -> String {
-    if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("admin").unwrap() == "1" {
-            let mut details = Map::new();
-            for column in get_column_details(body["table"]) {
-                details.insert(
-                    from_value(column[0].clone()),
-                    serde_json::Value::String(from_value::<String>(column[1].clone())),
-                );
-            }
-            return ok(&serde_json::to_string(&details).unwrap());
-        }
-    }
-    ok("")
-}
-
 pub fn get_database(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
-            let mut processed_columns = Vec::new();
+            let mut column_names = Vec::new();
+            let mut column_types = Vec::new();
             for column in get_column_details(body["table"]) {
-                let new_column = [from_value::<String>(column[0].clone()), from_value::<String>(column[1].clone())];
-                processed_columns.push(new_column);
+                column_names.push(from_value::<String>(column[0].clone()));
+                column_types.push(from_value::<String>(column[1].clone()));
             }
             let mut processed_rows = Vec::new();
             for row in get_all_rows(body["table"]) {
                 let mut new_row = Vec::new();
                 for i in 0..row.len() {
-                    let column_type = &processed_columns[i][1];
-                    if column_type.contains("date") {
+                    if column_types[i].contains("date") {
                         new_row.push(from_value::<NaiveDate>(row[i].clone()).to_string())
-                    } else if column_type.contains("int") {
+                    } else if column_types[i].contains("int") {
                         new_row.push(from_value::<i32>(row[i].clone()).to_string())
                     } else {
                         new_row.push(from_value::<String>(row[i].clone()).to_string());
@@ -349,8 +333,23 @@ pub fn get_database(body: HashMap<&str, &str>) -> String {
                 }
                 processed_rows.push(new_row);
             }
-            println!("{}", json!({"columns" : processed_columns, "rows" : processed_rows}));
-            return j_ok(json!({"columns" : processed_columns, "rows" : processed_rows}));
+            return j_ok(
+                json!({"columns" : column_names, "rows" : processed_rows, "types" : column_types}),
+            );
+        }
+    }
+    ok("")
+}
+
+pub fn get_row_titles(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]) {
+        if session.get("admin").unwrap() == "1" {
+            let mut titles: Vec<String> = Vec::new();
+            for title in get_some(body["table"], "title") {
+                println!("{:?}", get_some(body["table"], "title"));
+                titles.push(from_value(title[0].clone()));
+            }
+            return j_ok(json!({"table" : body["table"], "titles" : titles}));
         }
     }
     ok("")

@@ -7,6 +7,11 @@ pub fn get_like(table: &str, column_name: &str, column_value: &str) -> Vec<Vec<V
     )
 }
 
+pub fn get_some(table: &str, values: &str) -> Vec<Vec<Value>> {
+    let checked_table = check_table(table).unwrap();
+    mysql_statement(format!("SELECT ({}) FROM {}", values, checked_table), ())
+}
+
 pub fn get_all_rows(table: &str) -> Vec<Vec<Value>> {
     let checked_table = check_table(table).unwrap();
     mysql_statement(format!("SELECT * FROM {} ORDER BY id", checked_table), ())
@@ -58,7 +63,10 @@ pub fn insert_row(table: &str, titles: Vec<&str>, contents: Vec<&str>) {
 
 pub fn change_row(table: &str, where_name: &str, wherevalue: &str, name: &str, value: &str) {
     mysql_statement(
-        format!("UPDATE {} SET {} = :value WHERE {} = :wherevalue", table, name, where_name), 
-        params!(value, wherevalue)
+        format!(
+            "UPDATE {} SET {} = :value WHERE {} = :wherevalue",
+            table, name, where_name
+        ),
+        params!(value, wherevalue),
     );
 }
