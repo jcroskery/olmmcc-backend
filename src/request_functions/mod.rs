@@ -310,26 +310,27 @@ pub fn delete_account(body: HashMap<&str, &str>) -> String {
     j_ok(json!({ "message": message }))
 }
 
+fn get_column_types(table: &str) -> Vec<String> {
+    let mut column_types = Vec::new();
+    for column in get_column_details(table) {
+        column_types.push(from_value::<String>(column[1].clone()));
+    }
+    column_types
+}
+
 pub fn get_database(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
             let mut column_names = Vec::new();
-            let mut column_types = Vec::new();
             for column in get_column_details(body["table"]) {
                 column_names.push(from_value::<String>(column[0].clone()));
-                column_types.push(from_value::<String>(column[1].clone()));
             }
             let mut processed_rows = Vec::new();
+            let column_types = get_column_types(body["table"]);
             for row in get_all_rows(body["table"]) {
                 let mut new_row = Vec::new();
                 for i in 0..row.len() {
-                    if column_types[i].contains("date") {
-                        new_row.push(from_value::<NaiveDate>(row[i].clone()).to_string())
-                    } else if column_types[i].contains("int") {
-                        new_row.push(from_value::<i32>(row[i].clone()).to_string())
-                    } else {
-                        new_row.push(from_value::<String>(row[i].clone()).to_string());
-                    }
+                    push_value(&column_types[i], row[i].clone(), &mut new_row);
                 }
                 processed_rows.push(new_row);
             }
@@ -341,15 +342,42 @@ pub fn get_database(body: HashMap<&str, &str>) -> String {
     ok("")
 }
 
+fn push_value(column_type: &str, value: mysql::Value, vec: &mut Vec<String>) {
+    if column_type.contains("date") {
+        vec.push(from_value::<NaiveDate>(value).to_string())
+    } else if column_type.contains("int") {
+        vec.push(from_value::<i32>(value).to_string())
+    } else {
+        vec.push(from_value::<String>(value).to_string());
+    }
+}
+
 pub fn get_row_titles(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
             let mut titles: Vec<String> = Vec::new();
             for title in get_some(body["table"], "title") {
-                println!("{:?}", get_some(body["table"], "title"));
                 titles.push(from_value(title[0].clone()));
             }
             return j_ok(json!({"table" : body["table"], "titles" : titles}));
+        }
+    }
+    ok("")
+}
+
+pub fn move_row_to_end(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]) {
+        if session.get("admin").unwrap() == "1" {
+            let new_id = get_max_id(body["table"]) + 1;
+            change_row(body["table"], "id", body["id"], "id", &new_id.to_string());
+            let message = format!("Successfully moved row {} to end.", body["id"]);
+            let row = get_like(body["table"], "id", &new_id.to_string())[0].clone();
+            let mut formatted_row = Vec::new();
+            let column_types = get_column_types(body["table"]);
+            for i in 0..row.len() {
+                push_value(&column_types[i], row[i].clone(), &mut formatted_row);
+            }
+            return j_ok(json!({"success" : true, "message" : message, "row" : formatted_row, "old_id" : body["id"]}));
         }
     }
     ok("")

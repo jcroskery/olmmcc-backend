@@ -1,8 +1,9 @@
-use mysql::{params, Conn, OptsBuilder, Params, Value};
+use mysql::{from_value, params, Conn, OptsBuilder, Params, Value};
 
 pub fn get_like(table: &str, column_name: &str, column_value: &str) -> Vec<Vec<Value>> {
+    let checked_table = check_table(table).unwrap();
     mysql_statement(
-        format!("SELECT * FROM {} WHERE {} LIKE :value", table, column_name),
+        format!("SELECT * FROM {} WHERE {} LIKE :value", checked_table, column_name),
         params!("value" => column_value),
     )
 }
@@ -18,7 +19,7 @@ pub fn get_all_rows(table: &str) -> Vec<Vec<Value>> {
 }
 
 fn check_table(table: &str) -> Option<&str> {
-    const ALLOWED_TABLES: &[&str] = &["pages", "articles", "calendar", "songs"];
+    const ALLOWED_TABLES: &[&str] = &["pages", "articles", "calendar", "songs", "users"];
     for allowed_table in ALLOWED_TABLES {
         if *allowed_table == table {
             return Some(allowed_table);
@@ -62,11 +63,16 @@ pub fn insert_row(table: &str, titles: Vec<&str>, contents: Vec<&str>) {
 }
 
 pub fn change_row(table: &str, where_name: &str, wherevalue: &str, name: &str, value: &str) {
+    let checked_table = check_table(table).unwrap();
     mysql_statement(
         format!(
             "UPDATE {} SET {} = :value WHERE {} = :wherevalue",
-            table, name, where_name
+            checked_table, name, where_name
         ),
         params!(value, wherevalue),
     );
+}
+
+pub fn get_max_id(table: &str) -> i32 {
+    from_value(mysql_statement(format!("SELECT MAX(id) FROM {}", table), ())[0][0].clone())
 }

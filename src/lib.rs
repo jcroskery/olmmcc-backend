@@ -79,6 +79,7 @@ fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
         "/delete_account" => delete_account(body),
         "/get_database" => get_database(body),
         "/get_row_titles" => get_row_titles(body),
+        "/move_row_to_end" => move_row_to_end(body),
         _ => format!(
             "HTTP/1.1 404 Not Found\r\n\r\nThe provided url {} could not be resolved.",
             url
