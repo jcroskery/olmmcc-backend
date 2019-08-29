@@ -139,7 +139,7 @@ pub fn signup(body: HashMap<&str, &str>) -> String {
             "invalid_email",
         ],
         vec![&email, username, &hash(password_one), "0", "0", "1", "0"],
-    );
+    ).unwrap();
     j_ok(json!({"url" : "/login"}))
 }
 
@@ -231,7 +231,7 @@ pub fn change_password(body: HashMap<&str, &str>) -> String {
         if let Some(t) = check_passwords(password_one, password_two) {
             return message(t);
         }
-        change_row(
+        change_row_where(
             "users",
             "id",
             &session.get("id").unwrap(),
@@ -257,7 +257,7 @@ pub fn change_username(body: HashMap<&str, &str>) -> String {
     if let Some(t) = check_username(body["username"]) {
         return message(t);
     }
-    change_row(
+    change_row_where(
         "users",
         "id",
         &session.get("id").unwrap(),
@@ -277,7 +277,7 @@ pub fn change_subscription(body: HashMap<&str, &str>) -> String {
     if let Some(t) = check_subscription(body["subscription"]) {
         return message(t);
     }
-    change_row(
+    change_row_where(
         "users",
         "id",
         &session.get("id").unwrap(),
@@ -365,19 +365,79 @@ pub fn get_row_titles(body: HashMap<&str, &str>) -> String {
     ok("")
 }
 
+fn return_row(table: &str, id: i32) -> Vec<String> {
+    let row = get_like(table, "id", &id.to_string())[0].clone();
+    let mut formatted_row = Vec::new();
+    let column_types = get_column_types(table);
+    for i in 0..row.len() {
+        push_value(&column_types[i], row[i].clone(), &mut formatted_row);
+    }
+    formatted_row
+}
+
 pub fn move_row_to_end(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
             let new_id = get_max_id(body["table"]) + 1;
-            change_row(body["table"], "id", body["id"], "id", &new_id.to_string());
+            change_row_where(body["table"], "id", body["id"], "id", &new_id.to_string());
             let message = format!("Successfully moved row {} to end.", body["id"]);
-            let row = get_like(body["table"], "id", &new_id.to_string())[0].clone();
-            let mut formatted_row = Vec::new();
-            let column_types = get_column_types(body["table"]);
-            for i in 0..row.len() {
-                push_value(&column_types[i], row[i].clone(), &mut formatted_row);
+            return j_ok(
+                json!({"success" : true, "message" : message, "row" : return_row(body["table"], new_id), "old_id" : body["id"]}),
+            );
+        }
+    }
+    ok("")
+}
+
+pub fn move_row_to_start(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]) {
+        if session.get("admin").unwrap() == "1" {
+            let new_id = get_min_id(body["table"]) - 1;
+            change_row_where(body["table"], "id", body["id"], "id", &new_id.to_string());
+            let message = format!("Successfully moved row {} to start.", body["id"]);
+            return j_ok(
+                json!({"success" : true, "message" : message, "row" : return_row(body["table"], new_id), "old_id" : body["id"]}),
+            );
+        }
+    }
+    ok("")
+}
+
+pub fn delete_row(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]) {
+        if session.get("admin").unwrap() == "1" {
+            delete_row_where(body["table"], "id", body["id"]);
+            let message = format!("Successfully deleted row {}.", body["id"]);
+            return j_ok(json!({"success" : true, "message" : message, "id" : body["id"]}));
+        }
+    }
+    ok("")
+}
+
+pub fn add_row(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]) {
+        if session.get("admin").unwrap() == "1" {
+            let names = serde_json::from_str(body["names"]).unwrap();
+            let values = serde_json::from_str(body["values"]).unwrap();
+            if let Err(e) = insert_row(body["table"], names, values) {
+                return j_ok(json!({"success" : false, "message" : e}));
+            } else {
+                let row_id = get_max_id(body["table"]);
+                let message = format!("Successfully added row {}.", row_id);
+                return j_ok(
+                    json!({"success" : true, "message" : message, "row" : return_row(body["table"], row_id)}),
+                );
             }
-            return j_ok(json!({"success" : true, "message" : message, "row" : formatted_row, "old_id" : body["id"]}));
+        }
+    }
+    ok("")
+}
+
+pub fn change_row(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]) {
+        if session.get("admin").unwrap() == "1" {
+            change_row_where(body["table"], "id", body["id"], body["name"], body["value"]);
+            return ok(&format!("Successfully updated row {}.", body["id"]));
         }
     }
     ok("")
