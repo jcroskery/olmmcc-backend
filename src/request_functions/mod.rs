@@ -7,6 +7,7 @@ use session::Session;
 
 use std::collections::HashMap;
 use std::fs;
+use std::io::prelude::*;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 mod account_validation;
@@ -139,7 +140,8 @@ pub fn signup(body: HashMap<&str, &str>) -> String {
             "invalid_email",
         ],
         vec![&email, username, &hash(password_one), "0", "0", "1", "0"],
-    ).unwrap();
+    )
+    .unwrap();
     j_ok(json!({"url" : "/login"}))
 }
 
@@ -438,6 +440,18 @@ pub fn change_row(body: HashMap<&str, &str>) -> String {
         if session.get("admin").unwrap() == "1" {
             change_row_where(body["table"], "id", body["id"], body["name"], body["value"]);
             return ok(&format!("Successfully updated row {}.", body["id"]));
+        }
+    }
+    ok("")
+}
+
+pub fn get_gmail_auth_client_id(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]) {
+        if session.get("admin").unwrap() == "1" {
+            let mut file = fs::File::open("/home/justus/client_id").unwrap();
+            let mut contents = String::new();
+            file.read_to_string(&mut contents).unwrap();
+            return ok(&contents);
         }
     }
     ok("")
