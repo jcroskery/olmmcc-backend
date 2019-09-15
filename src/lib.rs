@@ -84,7 +84,8 @@ fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
         "/delete_row" => delete_row(body),
         "/add_row" => add_row(body),
         "/change_row" => change_row(body),
-        "/get_gmail_auth_client_id" => get_gmail_auth_client_id(body),
+        "/get_gmail_auth_url" => get_gmail_auth_url(body),
+        "/send_gmail_code" => send_gmail_code(body),
         _ => format!(
             "HTTP/1.1 404 Not Found\r\n\r\nThe provided url {} could not be resolved.",
             url

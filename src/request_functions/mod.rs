@@ -445,13 +445,25 @@ pub fn change_row(body: HashMap<&str, &str>) -> String {
     ok("")
 }
 
-pub fn get_gmail_auth_client_id(body: HashMap<&str, &str>) -> String {
+pub fn get_gmail_auth_url(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
             let mut file = fs::File::open("/home/justus/client_id").unwrap();
             let mut contents = String::new();
             file.read_to_string(&mut contents).unwrap();
-            return ok(&contents);
+            return ok(&format!(
+                "https://accounts.google.com/o/oauth2/v2/auth?scope=https%3A%2F%2Fmail.google.com%2F&access_type=offline&redirect_uri=https%3A%2F%2Fwww.olmmcc.tk%2Fadmin%2Femail%2F&response_type=code&client_id={}", 
+                contents.trim(),
+            ));
+        }
+    }
+    ok("")
+}
+
+pub fn send_gmail_code(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]) {
+        if session.get("admin").unwrap() == "1" {
+            println!("{:?}", body)
         }
     }
     ok("")
