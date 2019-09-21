@@ -448,12 +448,13 @@ pub fn change_row(body: HashMap<&str, &str>) -> String {
 pub fn get_gmail_auth_url(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
-            let mut file = fs::File::open("/home/justus/client_id").unwrap();
+            let mut file = fs::File::open("/home/justus/client_secret.json").unwrap();
             let mut contents = String::new();
             file.read_to_string(&mut contents).unwrap();
+            let json: Value = serde_json::from_str(&contents).unwrap();
             return ok(&format!(
-                "https://accounts.google.com/o/oauth2/v2/auth?scope=https%3A%2F%2Fmail.google.com%2F&access_type=offline&redirect_uri=https%3A%2F%2Fwww.olmmcc.tk%2Fadmin%2Femail%2F&response_type=code&client_id={}", 
-                contents.trim(),
+                "https://accounts.google.com/o/oauth2/v2/auth?scope=https://mail.google.com/&access_type=offline&redirect_uri=https://www.olmmcc.tk/admin/email/&response_type=code&client_id={}", 
+                json["client_id"].as_str().unwrap(),
             ));
         }
     }
@@ -463,7 +464,18 @@ pub fn get_gmail_auth_url(body: HashMap<&str, &str>) -> String {
 pub fn send_gmail_code(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
-            println!("{:?}", body)
+            let mut file = fs::File::open("/home/justus/client_secret.json").unwrap();
+            let mut contents = String::new();
+            file.read_to_string(&mut contents).unwrap();
+            let json: Value = serde_json::from_str(&contents).unwrap();
+            let mut hash = HashMap::new();
+            hash.insert("code", body["code"]);
+            hash.insert("access_type", "offline");
+            hash.insert("client_id", json["client_id"].as_str().unwrap());
+            hash.insert("client_secret", json["client_secret"].as_str().unwrap());
+            hash.insert("redirect_uri", "https://www.olmmcc.tk/admin/email/");
+            hash.insert("grant_type", "authorization_code");
+            println!("{}", http::make_secure_request("https://www.googleapis.com/oauth2/v4/token", hash));
         }
     }
     ok("")
