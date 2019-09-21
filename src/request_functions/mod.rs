@@ -453,7 +453,7 @@ pub fn get_gmail_auth_url(body: HashMap<&str, &str>) -> String {
             file.read_to_string(&mut contents).unwrap();
             let json: Value = serde_json::from_str(&contents).unwrap();
             return ok(&format!(
-                "https://accounts.google.com/o/oauth2/v2/auth?scope=https://mail.google.com/&access_type=offline&include_granted_scopes=true&prompt=consent&redirect_uri=https://www.olmmcc.tk/admin/email/&response_type=code&client_id={}", 
+                "https://accounts.google.com/o/oauth2/v2/auth?scope=https://mail.google.com/&include_granted_scopes=true&prompt=consent&redirect_uri=https://www.olmmcc.tk/admin/email/&response_type=code&client_id={}&access_type=offline", 
                 json["client_id"].as_str().unwrap(),
             ));
         }
