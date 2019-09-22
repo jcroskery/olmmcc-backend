@@ -54,6 +54,22 @@ pub fn mysql_statement<T: Into<Params>>(
     }
 }
 
+pub fn row_exists(table: &str, column_name: &str, column_value: &str) -> bool {
+    let checked_table = check_table(table).unwrap();
+    let result = mysql_statement(
+        format!(
+            "SELECT * FROM {} WHERE {} LIKE :value",
+            checked_table, column_name
+        ),
+        params!("value" => column_value),
+    );
+    if let Ok(_) = result {
+        true
+    } else {
+        false
+    }
+}
+
 pub fn insert_row(table: &str, titles: Vec<&str>, contents: Vec<&str>) -> Result<(), String> {
     let checked_table = check_table(table).unwrap();
     mysql_statement(
