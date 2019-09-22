@@ -477,7 +477,8 @@ pub fn send_gmail_code(body: HashMap<&str, &str>) -> String {
             hash.insert("grant_type", "authorization_code");
             let request =
                 http::make_secure_request("https://www.googleapis.com/oauth2/v4/token", hash);
-            println!("{}", request);
+            let request_json: Value = serde_json::from_str(&request).unwrap();
+            println!("{:?}", request_json);
         }
     }
     ok("")
