@@ -475,7 +475,9 @@ pub fn send_gmail_code(body: HashMap<&str, &str>) -> String {
             hash.insert("client_secret", json["client_secret"].as_str().unwrap());
             hash.insert("redirect_uri", "https://www.olmmcc.tk/admin/email/");
             hash.insert("grant_type", "authorization_code");
-            println!("{}", http::make_secure_request("https://www.googleapis.com/oauth2/v4/token", hash));
+            let request =
+                http::make_secure_request("https://www.googleapis.com/oauth2/v4/token", hash);
+            println!("{}", request);
         }
     }
     ok("")

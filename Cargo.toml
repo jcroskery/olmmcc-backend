@@ -8,17 +8,16 @@ license = "MIT OR Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-mysql = "16.0.2"
+mysql = "16.1.0"
 threadpool = "1.7.1"
 serde_json = "1.0.40"
 htmlescape = "0.3.1"
-chrono = "0.4.7"
-mysql_common = "0.17.1"
+chrono = "0.4.9"
 scrypt = "0.2.0"
 session = { git = "https://github.com/Somebody62/session" }
 http = { git = "https://github.com/Somebody62/http" }
 
 [dependencies.serde]
-version = "1.0.98"
+version = "1.0.101"
 default-features = false
 features = ["derive"]
