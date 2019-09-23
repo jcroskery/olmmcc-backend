@@ -23,7 +23,7 @@ pub fn get_all_rows(table: &str) -> Vec<Vec<Value>> {
 }
 
 fn check_table(table: &str) -> Option<&str> {
-    const ALLOWED_TABLES: &[&str] = &["pages", "articles", "calendar", "songs", "users"];
+    const ALLOWED_TABLES: &[&str] = &["admin", "pages", "articles", "calendar", "songs", "users"];
     for allowed_table in ALLOWED_TABLES {
         if *allowed_table == table {
             return Some(allowed_table);
@@ -55,18 +55,13 @@ pub fn mysql_statement<T: Into<Params>>(
 }
 
 pub fn row_exists(table: &str, column_name: &str, column_value: &str) -> bool {
-    let result = mysql_statement(
-        format!(
-            "SELECT * FROM {} WHERE {} LIKE :value",
-            table, column_name
-        ),
-        params!("value" => column_value),
-    );
-    if let Ok(_) = result {
-        true
-    } else {
-        false
+    let result = get_like(table, column_name, column_value);
+    for vec in result {
+        for cell in vec {
+            return true;
+        }
     }
+    false
 }
 
 pub fn insert_row(table: &str, titles: Vec<&str>, contents: Vec<&str>) -> Result<(), String> {
