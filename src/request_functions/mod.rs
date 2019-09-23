@@ -479,11 +479,11 @@ pub fn send_gmail_code(body: HashMap<&str, &str>) -> String {
                 http::make_secure_request("https://www.googleapis.com/oauth2/v4/token", hash);
             let request_json: Value = serde_json::from_str(&request).unwrap();
             let refresh_token = request_json["refresh_token"].as_str().unwrap();
-            println!("{:?}", session.get("email"));
             let email = &session.get("email").unwrap();
             if row_exists("admin", "email", email) {
                 change_row_where("admin", "email", email, "refresh_token", refresh_token);
             } else {
+                println!("hi");
                 insert_row(
                     "admin",
                     vec!["email", "refresh_token"],
