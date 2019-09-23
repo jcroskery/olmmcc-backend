@@ -493,7 +493,6 @@ pub fn send_gmail_code(body: HashMap<&str, &str>) -> String {
                 .unwrap();
             }
             */
-            println!("{:?}", request_json);
         }
     }
     ok("")
