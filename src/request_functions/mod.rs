@@ -481,6 +481,7 @@ pub fn send_gmail_code(body: HashMap<&str, &str>) -> String {
             let refresh_token = request_json["refresh_token"].as_str().unwrap();
             let email = &session.get("email").unwrap();
             if row_exists("admin", "email", email) {
+                println!("hibye");
                 change_row_where("admin", "email", email, "refresh_token", refresh_token);
             } else {
                 println!("hi");
