@@ -57,7 +57,7 @@ pub fn mysql_statement<T: Into<Params>>(
 pub fn row_exists(table: &str, column_name: &str, column_value: &str) -> bool {
     let result = get_like(table, column_name, column_value);
     for vec in result {
-        for cell in vec {
+        for _ in vec {
             return true;
         }
     }
