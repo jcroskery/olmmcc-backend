@@ -14,9 +14,8 @@ serde_json = "1.0.41"
 htmlescape = "0.3.1"
 chrono = "0.4.9"
 scrypt = "0.2.0"
-email-format = "0.7.0"
 session = { git = "https://github.com/Somebody62/session" }
-http = { git = "https://github.com/Somebody62/http" }
+gmail = { git = "https://github.com/Somebody62/gmail" }
 
 [dependencies.serde]
 version = "1.0.101"

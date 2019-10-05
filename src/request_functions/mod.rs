@@ -1,4 +1,3 @@
-use chrono::prelude::*;
 use chrono::NaiveDate;
 use htmlescape::decode_html;
 use mysql::from_value;
@@ -466,7 +465,7 @@ pub fn get_gmail_auth_url(body: HashMap<&str, &str>) -> String {
 pub fn send_gmail_code(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
-            let refresh_token = http::get_refresh_token(body["code"]);
+            let refresh_token = gmail::get_refresh_token(body["code"]);
             let email = &session.get("email").unwrap();
             if row_exists("admin", "email", email) {
                 change_row_where("admin", "email", email, "refresh_token", &refresh_token);
@@ -484,7 +483,7 @@ pub fn send_gmail_code(body: HashMap<&str, &str>) -> String {
 }
 
 fn get_access_token(email: &str) -> String {
-    http::get_access_token(&from_value::<String>(
+    gmail::get_access_token(&from_value::<String>(
         get_like("admin", "email", email)[0][1].clone(),
     ))
 }
@@ -492,23 +491,14 @@ fn get_access_token(email: &str) -> String {
 pub fn send_email(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
-            let mut email =
-                email_format::Email::new("justus@olmmcc.tk", Utc::now().to_rfc2822().as_str())
-                    .unwrap();
-            email
-                .set_to("Justus Croskery <justus.croskery@gmail.com>")
-                .unwrap();
-            email.set_subject("Hello Friend").unwrap();
-            email
-                .set_body(
-                    "Good to hear from you.\r\n\
-                     I wish you the best.\r\n\
-                     \r\n\
-                     Your Friend",
-                )
-                .unwrap();
-            let request = http::send_email(
-                &email.to_string(),
+            let request = gmail::send_email(
+                "Justus Croskery",
+                "justus.croskery@gmail.com",
+                "Hello Friend",
+                "Good to hear from you.\r\n\
+                I wish you the best.\r\n\
+                \r\n\
+                Your Friend",
                 get_access_token(&session.get("email").unwrap()).as_str(),
             );
             println!("{:?}", request);
