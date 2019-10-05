@@ -466,29 +466,15 @@ pub fn get_gmail_auth_url(body: HashMap<&str, &str>) -> String {
 pub fn send_gmail_code(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
-            let file = File::open("/home/justus/client_secret.json").unwrap();
-            let json: Value = serde_json::from_reader(file).unwrap();
-            let mut hash = HashMap::new();
-            hash.insert("code", body["code"]);
-            hash.insert("access_type", "offline");
-            hash.insert("client_id", json["client_id"].as_str().unwrap());
-            hash.insert("client_secret", json["client_secret"].as_str().unwrap());
-            hash.insert("redirect_uri", "https://www.olmmcc.tk/admin/email/");
-            hash.insert("grant_type", "authorization_code");
-            let request = http::make_secure_request(
-                "https://www.googleapis.com/oauth2/v4/token",
-                hash
-            );
-            let request_json: Value = serde_json::from_str(&request).unwrap();
-            let refresh_token = request_json["refresh_token"].as_str().unwrap();
+            let refresh_token = http::get_refresh_token(body["code"]);
             let email = &session.get("email").unwrap();
             if row_exists("admin", "email", email) {
-                change_row_where("admin", "email", email, "refresh_token", refresh_token);
+                change_row_where("admin", "email", email, "refresh_token", &refresh_token);
             } else {
                 insert_row(
                     "admin",
                     vec!["email", "refresh_token"],
-                    vec![email, refresh_token],
+                    vec![email, &refresh_token],
                 )
                 .unwrap();
             }
@@ -498,18 +484,9 @@ pub fn send_gmail_code(body: HashMap<&str, &str>) -> String {
 }
 
 fn get_access_token(email: &str) -> String {
-    let refresh_token: String = from_value(get_like("admin", "email", email)[0][1].clone());
-    let file = File::open("/home/justus/client_secret.json").unwrap();
-    let json: Value = serde_json::from_reader(file).unwrap();
-    let mut hash = HashMap::new();
-    hash.insert("grant_type", "refresh_token");
-    hash.insert("client_id", json["client_id"].as_str().unwrap());
-    hash.insert("client_secret", json["client_secret"].as_str().unwrap());
-    hash.insert("refresh_token", &refresh_token);
-    let request =
-        http::make_secure_request("https://www.googleapis.com/oauth2/v4/token", hash);
-    let request_json: Value = serde_json::from_str(&request).unwrap();
-    request_json["access_token"].as_str().unwrap().to_string()
+    http::get_access_token(&from_value::<String>(
+        get_like("admin", "email", email)[0][1].clone(),
+    ))
 }
 
 pub fn send_email(body: HashMap<&str, &str>) -> String {
@@ -530,15 +507,11 @@ pub fn send_email(body: HashMap<&str, &str>) -> String {
                      Your Friend",
                 )
                 .unwrap();
-            let raw = base64::encode(&email.as_bytes());
-            let body = format!("{{\r\n\"raw\": \"{}\"\r\n}}", raw);
-            let access_token = get_access_token(&session.get("email").unwrap());
             let request = http::send_email(
-                &body.to_string(),
-                access_token.as_str(),
+                &email.to_string(),
+                get_access_token(&session.get("email").unwrap()).as_str(),
             );
             println!("{:?}", request);
-            
             return ok("");
         }
     }
