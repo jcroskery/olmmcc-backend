@@ -5,10 +5,13 @@ use serde::Serialize;
 use serde_json::{json, Map, Value};
 use session::Session;
 
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
+use std::iter;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 mod account_validation;
@@ -490,7 +493,6 @@ fn get_access_token(email: Option<&str>) -> String {
     } else {
         get_all_rows("admin", false)[0][1].clone()
     };
-    println!("{:?}", refresh_token);
     gmail::get_access_token(&from_value::<String>(refresh_token))
 }
 
@@ -499,17 +501,39 @@ pub fn send_verification_email(body: HashMap<&str, &str>) -> String {
         if session.get("verified").unwrap() == "0" {
             let username = &session.get("not_verified_username").unwrap();
             let email = &session.get("not_verified_email").unwrap();
-            let verification_code = "";
-            session.set("verification_code", verification_code.to_string());
-            let request = gmail::send_email(
+            let mut rng = thread_rng();
+            let verification_code: String = iter::repeat(())
+                .map(|()| rng.sample(Alphanumeric))
+                .take(64)
+                .collect();
+            session.set("verification_code", verification_code.clone());
+            gmail::send_email(
                 "",
                 email,
                 "Verify your OLMMCC account",
-                &format!("Hello {},\r\nYou requested a verification of your email address by logging in. Please visit the following link to verify your email address: https://www.olmmcc.tk/account/verify/{} .\r\n\r\nThis message was sent by the OLMMCC automated system. If you received it in error please contact justus@olmmcc.tk", username, verification_code),
+                &format!("Hello {},\r\nYou requested a verification of your email address by logging in. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you received it in error please contact justus@olmmcc.tk", username, verification_code),
                 get_access_token(None).as_str(),
             );
-            println!("{:?}", request);
             return j_ok(json!({ "success": true }));
+        }
+    }
+    j_ok(json!({"success": false}))
+}
+
+pub fn verify_account(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]) {
+        if session.get("verified").unwrap() == "0" {
+            if session.get("verification_code").unwrap() == body["code"] {
+                let email = session.get("not_verified_email").unwrap();
+                session
+                    .unset("not_verified_username")
+                    .unset("not_verified_email");
+                change_row_where("users", "email", &email, "verified", "1");
+                refresh_session(&mut session, "email", email, None).unwrap();
+                
+                println!("Success!");
+                return j_ok(json!({ "success": true }));
+            }
         }
     }
     j_ok(json!({"success": false}))
