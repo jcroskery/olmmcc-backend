@@ -146,7 +146,7 @@ pub fn signup(body: HashMap<&str, &str>) -> String {
         vec![&email, username, &hash(password_one), "0", "0", "1", "0"],
     )
     .unwrap();
-    j_ok(json!({"url" : "/login"}))
+    j_ok(json!({"success" : true}))
 }
 
 pub fn login(body: HashMap<&str, &str>) -> String {
