@@ -170,13 +170,13 @@ fn refresh_session(
         }
         session
             .set("id", from_value::<i32>(user[3].clone()).to_string())
-            .set("verified", "1".to_string())
             .set(
                 "invalid_email",
                 from_value::<i32>(user[7].clone()).to_string(),
             );
         if from_value::<i32>(user[4].clone()) == 1 {
             session
+                .set("verified", "1".to_string())
                 .set("email", from_value(user[0].clone()))
                 .set("username", from_value(user[1].clone()))
                 .set("admin", from_value::<i32>(user[5].clone()).to_string())
@@ -187,6 +187,7 @@ fn refresh_session(
             Ok(true)
         } else {
             session
+                .set("verified", "0".to_string())
                 .set("not_verified_email", from_value(user[0].clone()))
                 .set("not_verified_username", from_value(user[1].clone()));
             Ok(false)
