@@ -17,9 +17,10 @@ pub fn get_some(table: &str, values: &str) -> Vec<Vec<Value>> {
     mysql_statement(format!("SELECT ({}) FROM {}", values, checked_table), ()).unwrap()
 }
 
-pub fn get_all_rows(table: &str) -> Vec<Vec<Value>> {
+pub fn get_all_rows(table: &str, order: bool) -> Vec<Vec<Value>> {
     let checked_table = check_table(table).unwrap();
-    mysql_statement(format!("SELECT * FROM {} ORDER BY id", checked_table), ()).unwrap()
+    let order = if order { " ORDER BY id" } else { "" };
+    mysql_statement(format!("SELECT * FROM {}{}", checked_table, order), ()).unwrap()
 }
 
 fn check_table(table: &str) -> Option<&str> {

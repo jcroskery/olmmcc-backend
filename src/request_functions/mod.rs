@@ -55,7 +55,7 @@ pub fn get_songs() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    let mut article: Vec<SongArticle> = get_all_rows("articles")
+    let mut article: Vec<SongArticle> = get_all_rows("articles", true)
         .iter()
         .filter(|row| {
             let this_expiry = from_value::<NaiveDate>(row[3].clone())
@@ -332,7 +332,7 @@ pub fn get_database(body: HashMap<&str, &str>) -> String {
             }
             let mut processed_rows = Vec::new();
             let column_types = get_column_types(body["table"]);
-            for row in get_all_rows(body["table"]) {
+            for row in get_all_rows(body["table"], true) {
                 let mut new_row = Vec::new();
                 for i in 0..row.len() {
                     push_value(&column_types[i], row[i].clone(), &mut new_row);
@@ -484,10 +484,14 @@ pub fn send_gmail_code(body: HashMap<&str, &str>) -> String {
     ok("")
 }
 
-fn get_access_token(email: &str) -> String {
-    gmail::get_access_token(&from_value::<String>(
-        get_like("admin", "email", email)[0][1].clone(),
-    ))
+fn get_access_token(email: Option<&str>) -> String {
+    let refresh_token = if let Some(e) = email {
+        get_like("admin", "email", e)[0][1].clone()
+    } else {
+        get_all_rows("admin", false)[0][1].clone()
+    };
+    println!("{:?}", refresh_token);
+    gmail::get_access_token(&from_value::<String>(refresh_token))
 }
 
 pub fn send_verification_email(body: HashMap<&str, &str>) -> String {
@@ -498,15 +502,15 @@ pub fn send_verification_email(body: HashMap<&str, &str>) -> String {
             let verification_code = "";
             session.set("verification_code", verification_code.to_string());
             let request = gmail::send_email(
-                username,
+                "",
                 email,
                 "Verify your OLMMCC account",
-                &format!("Hello {},\r\nYour email address has not been verified. Please visit the following link to verify your account: https://www.olmmcc.tk/account/verify/{} . \r\n\r\nThis message was sent by olmmcc.tk. If you received it in error please email justus@olmmcc.tk .", username, verification_code),
-                get_access_token(&session.get("email").unwrap()).as_str(),
+                &format!("Hello {},\r\nYou requested a verification of your email address by logging in. Please visit the following link to verify your email address: https://www.olmmcc.tk/account/verify/{} .\r\n\r\nThis message was sent by the OLMMCC automated system. If you received it in error please contact justus@olmmcc.tk", username, verification_code),
+                get_access_token(None).as_str(),
             );
             println!("{:?}", request);
-            return ok("");
+            return j_ok(json!({ "success": true }));
         }
     }
-    ok("")
+    j_ok(json!({"success": false}))
 }
