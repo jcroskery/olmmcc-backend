@@ -149,12 +149,9 @@ pub fn signup(body: HashMap<&str, &str>) -> String {
 pub fn login(body: HashMap<&str, &str>) -> String {
     let email = body["email"].to_lowercase();
     let mut session = Session::new(30, 100);
-    if let Some(message) = refresh_session(&mut session, "email", email, Some(body["password"])) {
-        j_ok(json!({"url" : "", "message" : message}))
-    } else {
-        j_ok(
-            json!({"url" : "/", "session" : session.get_id(), "message" : "Successfully logged in!"}),
-        )
+    match refresh_session(&mut session, "email", email, Some(body["password"])) {
+        Err(message) => j_ok(json!({ "message": message })),
+        Ok(verified) => j_ok(json!({"session" : session.get_id(), "verified" : verified})),
     }
 }
 
@@ -163,22 +160,23 @@ fn refresh_session(
     key: &str,
     value: String,
     password: Option<&str>,
-) -> Option<String> {
+) -> Result<bool, String> {
     let users = get_like("users", key, &value);
     if let Some(user) = users.iter().next() {
         if let Some(p) = password {
             if !hash_match(p, &from_value::<String>(user[2].clone())) {
-                return Some("Wrong password, please try again.".to_string());
+                return Err("Wrong password, please try again.".to_string());
             }
         }
+        session
+            .set("id", from_value::<i32>(user[3].clone()).to_string())
+            .set("verified", "1".to_string())
+            .set(
+                "invalid_email",
+                from_value::<i32>(user[7].clone()).to_string(),
+            );
         if from_value::<i32>(user[4].clone()) == 1 {
             session
-                .set("id", from_value::<i32>(user[3].clone()).to_string())
-                .set("verified", "1".to_string())
-                .set(
-                    "invalid_email",
-                    from_value::<i32>(user[7].clone()).to_string(),
-                )
                 .set("email", from_value(user[0].clone()))
                 .set("username", from_value(user[1].clone()))
                 .set("admin", from_value::<i32>(user[5].clone()).to_string())
@@ -186,12 +184,15 @@ fn refresh_session(
                     "subscription_policy",
                     from_value::<i32>(user[6].clone()).to_string(),
                 );
-            None
+            Ok(true)
         } else {
-            Some("This account has not been verified.".to_string())
+            session
+                .set("not_verified_email", from_value(user[0].clone()))
+                .set("not_verified_username", from_value(user[1].clone()));
+            Ok(false)
         }
     } else {
-        Some(format!("Wrong {}, please try again.", key))
+        Err(format!("Wrong {}, please try again.", key))
     }
 }
 
@@ -250,7 +251,7 @@ pub fn change_password(body: HashMap<&str, &str>) -> String {
 pub fn refresh(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         let id = session.get("id").unwrap();
-        refresh_session(&mut session, "id", id, None);
+        refresh_session(&mut session, "id", id, None).unwrap();
     }
     ok("")
 }
@@ -488,17 +489,18 @@ fn get_access_token(email: &str) -> String {
     ))
 }
 
-pub fn send_email(body: HashMap<&str, &str>) -> String {
+pub fn send_verification_email(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("admin").unwrap() == "1" {
+        if session.get("verified").unwrap() == "0" {
+            let username = &session.get("not_verified_username").unwrap();
+            let email = &session.get("not_verified_email").unwrap();
+            let verification_code = "";
+            session.set("verification_code", verification_code.to_string());
             let request = gmail::send_email(
-                "Justus Croskery",
-                "justus.croskery@gmail.com",
-                "Hello Friend",
-                "Good to hear from you.\r\n\
-                I wish you the best.\r\n\
-                \r\n\
-                Your Friend",
+                username,
+                email,
+                "Verify your OLMMCC account",
+                &format!("Hello {},\r\nYour email address has not been verified. Please visit the following link to verify your account: https://www.olmmcc.tk/account/verify/{} . \r\n\r\nThis message was sent by olmmcc.tk. If you received it in error please email justus@olmmcc.tk .", username, verification_code),
                 get_access_token(&session.get("email").unwrap()).as_str(),
             );
             println!("{:?}", request);
