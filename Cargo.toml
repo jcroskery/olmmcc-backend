@@ -15,6 +15,7 @@ htmlescape = "0.3.1"
 chrono = "0.4.9"
 scrypt = "0.2.0"
 rand = "0.7.2"
+num_cpus = "1.10.1"
 session = { git = "https://github.com/Somebody62/session" }
 gmail = { git = "https://github.com/Somebody62/gmail" }
 
