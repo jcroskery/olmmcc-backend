@@ -504,7 +504,7 @@ pub fn send_verification_email(body: HashMap<&str, &str>) -> String {
             let mut rng = thread_rng();
             let verification_code: String = iter::repeat(())
                 .map(|()| rng.sample(Alphanumeric))
-                .take(64)
+                .take(16)
                 .collect();
             session.set("verification_code", verification_code.clone());
             gmail::send_email(
