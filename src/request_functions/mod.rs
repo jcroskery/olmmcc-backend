@@ -196,7 +196,7 @@ fn refresh_session(
             Ok(false)
         }
     } else {
-        Err(format!("Wrong {}, please try again.", key))
+        Err("This email address is not registered. Please create a new account.".to_string())
     }
 }
 
@@ -297,18 +297,44 @@ pub fn change_subscription(body: HashMap<&str, &str>) -> String {
     }))
 }
 
-pub fn change_email(body: HashMap<&str, &str>) -> String {
+pub fn send_change_email(body: HashMap<&str, &str>) -> String {
     // An email needs to be added to the queue here
     let mut session = Session::from_id(body["session"]).unwrap();
     if session.get("verified").unwrap() == "1" {
         if let Some(t) = check_email(body["email"]) {
             return message(t);
         }
-        let message = format!("An email containing an link to change your account email has been sent to {}. Please check your inbox, including the spam folder, for the link. It may take a few minutes to receive the email.", session.get("email").unwrap());
-        j_ok(json!({ "message": message }))
+        let username = &session.get("username").unwrap();
+        let email = &session.get("email").unwrap();
+        let email_change_code = generate_verification_code();
+        session.set("email_change_code", email_change_code.clone());
+        session.set("new_email", body["email"].to_string());
+        gmail::send_email(
+            "",
+            email,
+            "Verify your Email Change Request",
+            &format!("Hello {},\r\nYou requested a change of your email address to {}. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", username, body["email"], email_change_code),
+            get_access_token(None).as_str(),
+        );
+        j_ok(json!({ "success": true, "email": email }))
     } else {
-        ok("")
+        j_ok(json!({ "success": false }))
     }
+}
+
+pub fn change_email(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]) {
+        if session.get("verified").unwrap() == "1" {
+            if session.get("email_change_code").unwrap() == body["code"] {
+                let id = session.get("id").unwrap();
+                let new_email = session.get("new_email").unwrap();
+                change_row_where("users", "id", &id, "email", &new_email);
+                refresh_session(&mut session, "id", id, None).unwrap();
+                return j_ok(json!({ "success": true }));
+            }
+        }
+    }
+    j_ok(json!({"success": false}))
 }
 
 pub fn delete_account(body: HashMap<&str, &str>) -> String {
@@ -495,17 +521,20 @@ fn get_access_token(email: Option<&str>) -> String {
     };
     gmail::get_access_token(&from_value::<String>(refresh_token))
 }
+fn generate_verification_code() -> String {
+    let mut rng = thread_rng();
+    iter::repeat(())
+        .map(|()| rng.sample(Alphanumeric))
+        .take(16)
+        .collect()
+}
 
 pub fn send_verification_email(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("verified").unwrap() == "0" {
             let username = &session.get("not_verified_username").unwrap();
             let email = &session.get("not_verified_email").unwrap();
-            let mut rng = thread_rng();
-            let verification_code: String = iter::repeat(())
-                .map(|()| rng.sample(Alphanumeric))
-                .take(16)
-                .collect();
+            let verification_code = generate_verification_code();
             session.set("verification_code", verification_code.clone());
             gmail::send_email(
                 "",
@@ -530,7 +559,6 @@ pub fn verify_account(body: HashMap<&str, &str>) -> String {
                     .unset("not_verified_email");
                 change_row_where("users", "email", &email, "verified", "1");
                 refresh_session(&mut session, "email", email, None).unwrap();
-                
                 println!("Success!");
                 return j_ok(json!({ "success": true }));
             }
