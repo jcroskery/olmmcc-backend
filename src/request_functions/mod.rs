@@ -328,6 +328,7 @@ pub fn change_email(body: HashMap<&str, &str>) -> String {
             if session.get("email_change_code").unwrap() == body["code"] {
                 let id = session.get("id").unwrap();
                 let new_email = session.get("new_email").unwrap();
+                session.unset("new_email");
                 change_row_where("users", "id", &id, "email", &new_email);
                 refresh_session(&mut session, "id", id, None).unwrap();
                 return j_ok(json!({ "success": true }));
@@ -337,11 +338,38 @@ pub fn change_email(body: HashMap<&str, &str>) -> String {
     j_ok(json!({"success": false}))
 }
 
-pub fn delete_account(body: HashMap<&str, &str>) -> String {
+pub fn send_delete_email(body: HashMap<&str, &str>) -> String {
     // An email needs to be added to the queue here
     let mut session = Session::from_id(body["session"]).unwrap();
-    let message = format!("An email containing an link to delete your OLMMCC account has been sent to {}. Please check your inbox, including the spam folder, for the link. It may take a few minutes to receive the email.", session.get("email").unwrap());
-    j_ok(json!({ "message": message }))
+    if session.get("verified").unwrap() == "1" {
+        let username = &session.get("username").unwrap();
+        let email = &session.get("email").unwrap();
+        let delete_code = generate_verification_code();
+        session.set("delete_code", delete_code.clone());
+        gmail::send_email(
+            "",
+            email,
+            "Verify your Account Deletion Request",
+            &format!("Hello {},\r\nYou requested a deletion of your OLMMCC account. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", username, delete_code),
+            get_access_token(None).as_str(),
+        );
+        j_ok(json!({ "success": true, "email": email }))
+    } else {
+        j_ok(json!({ "success": false }))
+    }
+}
+
+pub fn delete_account(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]) {
+        if session.get("verified").unwrap() == "1" {
+            if session.get("delete_code").unwrap() == body["code"] {
+                let id = session.get("id").unwrap();
+                delete_row_where("users", "id", &id);
+                return j_ok(json!({ "success": true }));
+            }
+        }
+    }
+    j_ok(json!({"success": false}))
 }
 
 fn get_column_types(table: &str) -> Vec<String> {

@@ -76,6 +76,7 @@ fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
         "/change_username" => change_username(body),
         "/change_subscription" => change_subscription(body),
         "/send_change_email" => send_change_email(body),
+        "/send_delete_email" => send_delete_email(body),
         "/change_email" => change_email(body),
         "/delete_account" => delete_account(body),
         "/get_database" => get_database(body),
