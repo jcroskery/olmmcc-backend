@@ -225,7 +225,7 @@ pub fn kill_session(body: HashMap<&str, &str>) -> String {
 
 pub fn send_password_email(body: HashMap<&str, &str>) -> String {
     let mut session;
-    let mut email;
+    let email;
     if let Some(id) = body.get("session") {
         session = Session::from_id(id).unwrap();
         email = session.get("email").unwrap();
