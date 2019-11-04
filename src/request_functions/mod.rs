@@ -202,7 +202,7 @@ fn refresh_session(
 
 pub fn get_account(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("verified").unwrap() == "1" {
+        if session.get("verified").unwrap_or_default() == "1" {
             const ALLOWED_VARS: &[&str] = &["email", "username", "admin", "subscription_policy"];
             let mut map = Map::new();
             for var in ALLOWED_VARS {
@@ -223,33 +223,62 @@ pub fn kill_session(body: HashMap<&str, &str>) -> String {
     ok("")
 }
 
+pub fn send_password_email(body: HashMap<&str, &str>) -> String {
+    let mut session;
+    let mut email;
+    if let Some(id) = body.get("session") {
+        session = Session::from_id(id).unwrap();
+        email = session.get("email").unwrap();
+        if session.get("verified").unwrap() != "1" {
+            return ok("");
+        }
+    } else {
+        email = body["email"].to_string();
+        let users = get_like("users", "email", &email);
+        if let None = users.iter().next() {
+            return ok("");
+        }
+        session = Session::new(30, 100);
+        session.set("forgot_password_email", body["email"].to_string());
+    }
+    let password_one = body["password1"];
+    let password_two = body["password2"];
+    let username = session.get("username").unwrap_or(email.clone());
+    if let Some(t) = check_passwords(password_one, password_two) {
+        return message(t);
+    }
+    let password_change_code = generate_verification_code();
+    session.set("password_change_code", password_change_code.clone());
+    session.set("new_password", password_one.to_string());
+    gmail::send_email(
+            "",
+            &email,
+            "Verify your Password Change Request",
+            &format!("Hello {},\r\nYou requested a change of your password. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", &username, password_change_code),
+            get_access_token(None).as_str(),
+        );
+    return j_ok(json!({ "success": true, "email": email, "session": session.get_id() }));
+}
+
 pub fn change_password(body: HashMap<&str, &str>) -> String {
     let mut session = Session::from_id(body["session"]).unwrap();
-    let password_hash = get_like("users", "email", &session.get("email").unwrap())
-        .iter()
-        .next()
-        .unwrap()[2]
-        .clone();
-    if hash_match(
-        body["current_password"],
-        &from_value::<String>(password_hash),
-    ) {
-        let password_one = body["password1"];
-        let password_two = body["password2"];
-        if let Some(t) = check_passwords(password_one, password_two) {
-            return message(t);
-        }
+    if session.get("password_change_code").unwrap() == body["code"] {
+        let email = &session
+            .get("email")
+            .unwrap_or_else(|| session.get("forgot_password_email").unwrap());
         change_row_where(
             "users",
-            "id",
-            &session.get("id").unwrap(),
+            "email",
+            email,
             "password",
-            &hash(password_one),
+            &hash(&session.get("new_password").unwrap()),
         );
-        j_ok(json!({"message" : "Your password was successfully changed!"}))
-    } else {
-        j_ok(json!({"message" : "Wrong password, please try again."}))
+        session.delete();
+        return j_ok(
+            json!({"success" : true, "message" : "Your password was successfully changed!"}),
+        );
     }
+    ok("")
 }
 
 pub fn refresh(body: HashMap<&str, &str>) -> String {
@@ -587,7 +616,6 @@ pub fn verify_account(body: HashMap<&str, &str>) -> String {
                     .unset("not_verified_email");
                 change_row_where("users", "email", &email, "verified", "1");
                 refresh_session(&mut session, "email", email, None).unwrap();
-                println!("Success!");
                 return j_ok(json!({ "success": true }));
             }
         }
