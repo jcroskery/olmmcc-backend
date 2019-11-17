@@ -1,5 +1,6 @@
 use scrypt::{scrypt_check, scrypt_simple, ScryptParams};
 use serde_json::json;
+use regex::Regex;
 
 use std::collections::HashMap;
 use std::io::prelude::*;
@@ -36,7 +37,10 @@ pub fn handle_connection(mut stream: TcpStream) {
             .to_string();
     if request.contains("multipart/form-data") {
         let url = request.split_ascii_whitespace().collect::<Vec<&str>>()[1];
-        let body = request.split("\r\n\r\n").skip(1).collect::<Vec<&str>>();
+        let regex = Regex::new(r"(\\r\\n\\r\\n)").unwrap();
+        let unsplit_body = regex.replace(&request, "");
+        let other_regex = Regex::new("\"\\r\\n\\r\\n").unwrap();
+        let body = other_regex.split(&unsplit_body).collect();
         response = formulate_response(url, get_form_data(body));
     }
     stream.write(response.as_bytes()).unwrap();
@@ -46,11 +50,8 @@ fn get_form_data(body: Vec<&str>) -> HashMap<&str, &str> {
     let mut hash_map = HashMap::new();
     for i in 0..(body.len() - 1) {
         hash_map.insert(
-            body[i].split("name=\"").collect::<Vec<&str>>()[1]
-                .split("\"")
-                .next()
-                .unwrap(),
-            body[i + 1].split("\r\n").collect::<Vec<&str>>()[0],
+            body[i].split("name=\"").collect::<Vec<&str>>()[1],
+            body[i + 1].split("\r\n--").collect::<Vec<&str>>()[0],
         );
     }
     hash_map
@@ -91,6 +92,7 @@ fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
         "/send_gmail_code" => send_gmail_code(body),
         "/send_verification_email" => send_verification_email(body),
         "/verify_account" => verify_account(body),
+        "/send_email" => send_email(body),
         _ => format!(
             "HTTP/1.1 404 Not Found\r\n\r\nThe provided url {} could not be resolved.",
             url

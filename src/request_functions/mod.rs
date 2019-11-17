@@ -249,7 +249,7 @@ pub fn send_password_email(body: HashMap<&str, &str>) -> String {
     }
     let password_change_code = generate_verification_code();
     session.set("password_change_code", password_change_code.clone());
-    session.set("new_password", password_one.to_string());
+    session.set("new_password", hash(password_one));
     gmail::send_email(
             "",
             &email,
@@ -271,7 +271,7 @@ pub fn change_password(body: HashMap<&str, &str>) -> String {
             "email",
             email,
             "password",
-            &hash(&session.get("new_password").unwrap()),
+            &session.get("new_password").unwrap(),
         );
         session.delete();
         return j_ok(
@@ -621,4 +621,24 @@ pub fn verify_account(body: HashMap<&str, &str>) -> String {
         }
     }
     j_ok(json!({"success": false}))
+}
+
+pub fn send_email(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]) {
+        if session.get("admin").unwrap() == "1" {
+            gmail::send_email(
+                "",
+                if body["recipients"] == "all_users" {
+                    ""
+                } else {
+                    body["recipient"]
+                },
+                body["subject"],
+                body["body"],
+                get_access_token(None).as_str(),
+            );
+            return j_ok(json!({ "success": true }));
+        }
+    }
+    j_ok(json!({ "success": false }))
 }
