@@ -47,10 +47,10 @@ struct CalendarEvent {
 }
 
 pub fn get_page(body: HashMap<&str, &str>) -> String {
-    ok(&decode_html(&from_value::<String>(
+    let page_text = &decode_html(&from_value::<String>(
         get_like("pages", "topnav_id", body["page"])[0][1].clone(),
-    ))
-    .unwrap())
+    )).unwrap();
+    j_ok(json!({"text" : page_text}))
 }
 pub fn get_songs() -> String {
     let mut expiry = 0;
