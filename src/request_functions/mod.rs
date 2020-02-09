@@ -220,7 +220,7 @@ pub fn kill_session(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         session.delete();
     }
-    ok("")
+    j_ok(json!({}))
 }
 
 pub fn send_password_email(body: HashMap<&str, &str>) -> String {
@@ -286,7 +286,7 @@ pub fn refresh(body: HashMap<&str, &str>) -> String {
         let id = session.get("id").unwrap();
         refresh_session(&mut session, "id", id, None).unwrap();
     }
-    ok("")
+    j_ok(json!({}))
 }
 
 pub fn change_username(body: HashMap<&str, &str>) -> String {
@@ -426,11 +426,11 @@ pub fn get_database(body: HashMap<&str, &str>) -> String {
                 processed_rows.push(new_row);
             }
             return j_ok(
-                json!({"columns" : column_names, "rows" : processed_rows, "types" : column_types}),
+                json!({"success": true, "columns" : column_names, "rows" : processed_rows, "types" : column_types}),
             );
         }
     }
-    ok("")
+    j_ok(json!({"success": false}))
 }
 
 fn push_value(column_type: &str, value: mysql::Value, vec: &mut Vec<String>) {
@@ -541,13 +541,13 @@ pub fn get_gmail_auth_url(body: HashMap<&str, &str>) -> String {
             let mut contents = String::new();
             file.read_to_string(&mut contents).unwrap();
             let json: Value = serde_json::from_str(&contents).unwrap();
-            return ok(&format!(
+            return j_ok(json!({"url": &format!(
                 "https://accounts.google.com/o/oauth2/v2/auth?scope=https://mail.google.com/&include_granted_scopes=true&prompt=consent&redirect_uri=https://www.olmmcc.tk/admin/email/&response_type=code&client_id={}&access_type=offline", 
                 json["client_id"].as_str().unwrap(),
-            ));
+            )}));
         }
     }
-    ok("")
+    j_ok(json!({"url": ""}))
 }
 
 pub fn send_gmail_code(body: HashMap<&str, &str>) -> String {
@@ -567,7 +567,7 @@ pub fn send_gmail_code(body: HashMap<&str, &str>) -> String {
             }
         }
     }
-    ok("")
+    j_ok(json!({}))
 }
 
 fn get_access_token(email: Option<&str>) -> String {
