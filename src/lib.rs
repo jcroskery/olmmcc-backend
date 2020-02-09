@@ -64,7 +64,6 @@ fn j_ok(body: serde_json::Value) -> String {
 }
 fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
     match url {
-        "/get_page" => get_page(body),
         "/get_songs" => get_songs(),
         "/get_image_list" => get_image_list(),
         "/get_calendar_events" => get_calendar_events(body),
@@ -75,7 +74,6 @@ fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
         "/change_password" => change_password(body),
         "/send_password_email" => send_password_email(body),
         "/refresh" => refresh(body),
-        "/change_username" => change_username(body),
         "/change_subscription" => change_subscription(body),
         "/send_change_email" => send_change_email(body),
         "/send_delete_email" => send_delete_email(body),

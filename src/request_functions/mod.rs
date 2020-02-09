@@ -1,5 +1,4 @@
 use chrono::NaiveDate;
-use htmlescape::decode_html;
 use mysql::from_value;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
@@ -44,13 +43,6 @@ struct CalendarEvent {
     start_time: String,
     end_time: String,
     notes: String,
-}
-
-pub fn get_page(body: HashMap<&str, &str>) -> String {
-    let page_text = &decode_html(&from_value::<String>(
-        get_like("pages", "topnav_id", body["page"])[0][1].clone(),
-    )).unwrap();
-    j_ok(json!({"text" : page_text}))
 }
 pub fn get_songs() -> String {
     let mut expiry = 0;
@@ -120,7 +112,6 @@ pub fn get_calendar_events(body: HashMap<&str, &str>) -> String {
 
 pub fn signup(body: HashMap<&str, &str>) -> String {
     let email = body["email"].to_lowercase();
-    let username = body["username"];
     let password_one = body["password1"];
     let password_two = body["password2"];
     if let Some(t) = check_passwords(password_one, password_two) {
@@ -129,21 +120,17 @@ pub fn signup(body: HashMap<&str, &str>) -> String {
     if let Some(t) = check_email(&email) {
         return message(t);
     }
-    if let Some(t) = check_username(username) {
-        return message(t);
-    }
     insert_row(
         "users",
         vec![
             "email",
-            "username",
             "password",
             "verified",
             "admin",
             "subscription_policy",
             "invalid_email",
         ],
-        vec![&email, username, &hash(password_one), "0", "0", "1", "0"],
+        vec![&email, &hash(password_one), "0", "0", "1", "0"],
     )
     .unwrap();
     j_ok(json!({"success" : true}))
@@ -167,32 +154,30 @@ fn refresh_session(
     let users = get_like("users", key, &value);
     if let Some(user) = users.iter().next() {
         if let Some(p) = password {
-            if !hash_match(p, &from_value::<String>(user[2].clone())) {
+            if !hash_match(p, &from_value::<String>(user[1].clone())) {
                 return Err("Wrong password, please try again.".to_string());
             }
         }
         session
-            .set("id", from_value::<i32>(user[3].clone()).to_string())
+            .set("id", from_value::<i32>(user[2].clone()).to_string())
             .set(
                 "invalid_email",
-                from_value::<i32>(user[7].clone()).to_string(),
+                from_value::<i32>(user[6].clone()).to_string(),
             );
-        if from_value::<i32>(user[4].clone()) == 1 {
+        if from_value::<i32>(user[3].clone()) == 1 {
             session
                 .set("verified", "1".to_string())
                 .set("email", from_value(user[0].clone()))
-                .set("username", from_value(user[1].clone()))
-                .set("admin", from_value::<i32>(user[5].clone()).to_string())
+                .set("admin", from_value::<i32>(user[4].clone()).to_string())
                 .set(
                     "subscription_policy",
-                    from_value::<i32>(user[6].clone()).to_string(),
+                    from_value::<i32>(user[5].clone()).to_string(),
                 );
             Ok(true)
         } else {
             session
                 .set("verified", "0".to_string())
-                .set("not_verified_email", from_value(user[0].clone()))
-                .set("not_verified_username", from_value(user[1].clone()));
+                .set("not_verified_email", from_value(user[0].clone()));
             Ok(false)
         }
     } else {
@@ -203,7 +188,7 @@ fn refresh_session(
 pub fn get_account(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("verified").unwrap_or_default() == "1" {
-            const ALLOWED_VARS: &[&str] = &["email", "username", "admin", "subscription_policy"];
+            const ALLOWED_VARS: &[&str] = &["email", "admin", "subscription_policy"];
             let mut map = Map::new();
             for var in ALLOWED_VARS {
                 if body["details"].contains(var) {
@@ -243,7 +228,6 @@ pub fn send_password_email(body: HashMap<&str, &str>) -> String {
     }
     let password_one = body["password1"];
     let password_two = body["password2"];
-    let username = session.get("username").unwrap_or(email.clone());
     if let Some(t) = check_passwords(password_one, password_two) {
         return message(t);
     }
@@ -254,7 +238,7 @@ pub fn send_password_email(body: HashMap<&str, &str>) -> String {
             "",
             &email,
             "Verify your Password Change Request",
-            &format!("Hello {},\r\nYou requested a change of your password. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", &username, password_change_code),
+            &format!("Hello,\r\nYou requested a change of your password. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", password_change_code),
             get_access_token(None).as_str(),
         );
     return j_ok(json!({ "success": true, "email": email, "session": session.get_id() }));
@@ -289,21 +273,6 @@ pub fn refresh(body: HashMap<&str, &str>) -> String {
     j_ok(json!({}))
 }
 
-pub fn change_username(body: HashMap<&str, &str>) -> String {
-    let mut session = Session::from_id(body["session"]).unwrap();
-    if let Some(t) = check_username(body["username"]) {
-        return message(t);
-    }
-    change_row_where(
-        "users",
-        "id",
-        &session.get("id").unwrap(),
-        "username",
-        body["username"],
-    );
-    j_ok(json!({"message" : "Your username was successfully changed!"}))
-}
-
 pub fn change_subscription(body: HashMap<&str, &str>) -> String {
     const SUBSCRIPTION_MESSAGES: &[&str] = &[
         "You are now unsubscribed from receiving emails.",
@@ -333,7 +302,6 @@ pub fn send_change_email(body: HashMap<&str, &str>) -> String {
         if let Some(t) = check_email(body["email"]) {
             return message(t);
         }
-        let username = &session.get("username").unwrap();
         let email = &session.get("email").unwrap();
         let email_change_code = generate_verification_code();
         session.set("email_change_code", email_change_code.clone());
@@ -342,7 +310,7 @@ pub fn send_change_email(body: HashMap<&str, &str>) -> String {
             "",
             email,
             "Verify your Email Change Request",
-            &format!("Hello {},\r\nYou requested a change of your email address to {}. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", username, body["email"], email_change_code),
+            &format!("Hello,\r\nYou requested a change of your email address to {}. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", body["email"], email_change_code),
             get_access_token(None).as_str(),
         );
         j_ok(json!({ "success": true, "email": email }))
@@ -371,7 +339,6 @@ pub fn send_delete_email(body: HashMap<&str, &str>) -> String {
     // An email needs to be added to the queue here
     let mut session = Session::from_id(body["session"]).unwrap();
     if session.get("verified").unwrap() == "1" {
-        let username = &session.get("username").unwrap();
         let email = &session.get("email").unwrap();
         let delete_code = generate_verification_code();
         session.set("delete_code", delete_code.clone());
@@ -379,7 +346,7 @@ pub fn send_delete_email(body: HashMap<&str, &str>) -> String {
             "",
             email,
             "Verify your Account Deletion Request",
-            &format!("Hello {},\r\nYou requested a deletion of your OLMMCC account. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", username, delete_code),
+            &format!("Hello,\r\nYou requested a deletion of your OLMMCC account. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", delete_code),
             get_access_token(None).as_str(),
         );
         j_ok(json!({ "success": true, "email": email }))
@@ -589,7 +556,6 @@ fn generate_verification_code() -> String {
 pub fn send_verification_email(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("verified").unwrap() == "0" {
-            let username = &session.get("not_verified_username").unwrap();
             let email = &session.get("not_verified_email").unwrap();
             let verification_code = generate_verification_code();
             session.set("verification_code", verification_code.clone());
@@ -597,7 +563,7 @@ pub fn send_verification_email(body: HashMap<&str, &str>) -> String {
                 "",
                 email,
                 "Verify your OLMMCC account",
-                &format!("Hello {},\r\nYou requested a verification of your email address by logging in. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you received it in error please contact justus@olmmcc.tk", username, verification_code),
+                &format!("Hello,\r\nYou requested a verification of your email address by logging in. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you received it in error please contact justus@olmmcc.tk", verification_code),
                 get_access_token(None).as_str(),
             );
             return j_ok(json!({ "success": true }));
@@ -611,9 +577,7 @@ pub fn verify_account(body: HashMap<&str, &str>) -> String {
         if session.get("verified").unwrap() == "0" {
             if session.get("verification_code").unwrap() == body["code"] {
                 let email = session.get("not_verified_email").unwrap();
-                session
-                    .unset("not_verified_username")
-                    .unset("not_verified_email");
+                session.unset("not_verified_email");
                 change_row_where("users", "email", &email, "verified", "1");
                 refresh_session(&mut session, "email", email, None).unwrap();
                 return j_ok(json!({ "success": true }));

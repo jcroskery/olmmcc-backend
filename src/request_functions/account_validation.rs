@@ -20,17 +20,6 @@ pub fn check_email(email: &str) -> Option<&str> {
         Some("Sorry, your email address is too long. Please use a different email address.")
     }
 }
-pub fn check_username(username: &str) -> Option<&str> {
-    if username.len() <= 32 && username.len() >= 4 {
-        if let None = super::get_like("users", "username", username).get(0) {
-            None
-        } else {
-            Some("Sorry, this username has already been taken. Please select another.")
-        }
-    } else {
-        Some("Sorry, your username is invalid. Please use between 4 and 32 characters for your username.")
-    }
-}
 
 pub fn check_subscription(subscription: &str) -> Option<&str> {
     if let Ok(t) = subscription.parse::<i32>() {
