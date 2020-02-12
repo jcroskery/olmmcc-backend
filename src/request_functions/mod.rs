@@ -112,11 +112,6 @@ pub fn get_calendar_events(body: HashMap<&str, &str>) -> String {
 
 pub fn signup(body: HashMap<&str, &str>) -> String {
     let email = body["email"].to_lowercase();
-    let password_one = body["password1"];
-    let password_two = body["password2"];
-    if let Some(t) = check_passwords(password_one, password_two) {
-        return message(t);
-    }
     if let Some(t) = check_email(&email) {
         return message(t);
     }
@@ -130,10 +125,14 @@ pub fn signup(body: HashMap<&str, &str>) -> String {
             "subscription_policy",
             "invalid_email",
         ],
-        vec![&email, &hash(password_one), "0", "0", "1", "0"],
+        vec![&email, "", "0", "0", "1", "0"],
     )
     .unwrap();
-    j_ok(json!({"success" : true}))
+    let mut session = Session::new(30, 100);
+    match refresh_session(&mut session, "email", email, None) {
+        Err(message) => j_ok(json!({"message": message })),
+        Ok(verified) => j_ok(json!({"session" : session.get_id(), "verified" : verified})),
+    }
 }
 
 pub fn login(body: HashMap<&str, &str>) -> String {
