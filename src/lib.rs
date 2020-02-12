@@ -69,6 +69,7 @@ fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
         "/get_calendar_events" => get_calendar_events(body),
         "/signup" => signup(body),
         "/login" => login(body),
+        "/admin_login" => admin_login(body),
         "/kill_session" => kill_session(body),
         "/get_account" => get_account(body),
         "/change_password" => change_password(body),
@@ -88,7 +89,7 @@ fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
         "/change_row" => change_row(body),
         "/get_gmail_auth_url" => get_gmail_auth_url(body),
         "/send_gmail_code" => send_gmail_code(body),
-        "/send_verification_email" => send_verification_email(body),
+        "/send_login_email" => send_login_email(body),
         "/verify_account" => verify_account(body),
         "/send_email" => send_email(body),
         _ => format!(

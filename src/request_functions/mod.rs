@@ -120,31 +120,68 @@ pub fn signup(body: HashMap<&str, &str>) -> String {
         vec![
             "email",
             "password",
-            "verified",
-            "admin",
             "subscription_policy",
-            "invalid_email",
         ],
-        vec![&email, "", "0", "0", "1", "0"],
+        vec![&email, "", "1"],
     )
     .unwrap();
     let mut session = Session::new(30, 100);
-    match refresh_session(&mut session, "email", email, None) {
-        Err(message) => j_ok(json!({"message": message })),
-        Ok(verified) => j_ok(json!({"session" : session.get_id(), "verified" : verified})),
+    match refresh_user_session(&mut session, "email", email.clone(), "0") {
+        Some(message) => j_ok(json!({"message": message })),
+        None => j_ok(json!({"session" : session.get_id(), "email": email})),
     }
 }
 
 pub fn login(body: HashMap<&str, &str>) -> String {
     let email = body["email"].to_lowercase();
     let mut session = Session::new(30, 100);
-    match refresh_session(&mut session, "email", email, Some(body["password"])) {
+    match refresh_user_session(&mut session, "email", email.clone(), "0") {
+        Some(message) => j_ok(json!({ "message": message })),
+        None => j_ok(json!({"session" : session.get_id(), "email": email})),
+    }
+}
+
+pub fn admin_login(body: HashMap<&str, &str>) -> String {
+    let email = body["email"].to_lowercase();
+    let mut session = Session::new(30, 100);
+    match refresh_admin_session(&mut session, "email", email, Some(body["password"])) {
         Err(message) => j_ok(json!({ "message": message })),
         Ok(verified) => j_ok(json!({"session" : session.get_id(), "verified" : verified})),
     }
 }
 
-fn refresh_session(
+fn refresh_user_session(
+    session: &mut Session,
+    key: &str,
+    value: String,
+    verified: &str,
+) -> Option<String> {
+    let users = get_like("users", key, &value);
+    if let Some(user) = users.iter().next() {
+        session
+            .set("id", from_value::<i32>(user[1].clone()).to_string());
+        if verified == "1" {
+            session
+                .set("verified", "1".to_string())
+                .set("email", from_value(user[0].clone()))
+                .set("admin", 0.to_string())
+                .set(
+                    "subscription_policy",
+                    from_value::<i32>(user[2].clone()).to_string(),
+                );
+            None
+        } else {
+            session
+                .set("verified", "0".to_string())
+                .set("not_verified_email", from_value(user[0].clone()));
+            None
+        }
+    } else {
+        Some("This email address is not registered. Please create a new account.".to_string())
+    }
+}
+
+fn refresh_admin_session(
     session: &mut Session,
     key: &str,
     value: String,
@@ -267,7 +304,8 @@ pub fn change_password(body: HashMap<&str, &str>) -> String {
 pub fn refresh(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         let id = session.get("id").unwrap();
-        refresh_session(&mut session, "id", id, None).unwrap();
+        let verified = &session.get("verified").unwrap();
+        refresh_user_session(&mut session, "id", id, verified).unwrap();
     }
     j_ok(json!({}))
 }
@@ -326,7 +364,7 @@ pub fn change_email(body: HashMap<&str, &str>) -> String {
                 let new_email = session.get("new_email").unwrap();
                 session.unset("new_email");
                 change_row_where("users", "id", &id, "email", &new_email);
-                refresh_session(&mut session, "id", id, None).unwrap();
+                refresh_user_session(&mut session, "id", id, "0").unwrap();
                 return j_ok(json!({ "success": true }));
             }
         }
@@ -538,9 +576,9 @@ pub fn send_gmail_code(body: HashMap<&str, &str>) -> String {
 
 fn get_access_token(email: Option<&str>) -> String {
     let refresh_token = if let Some(e) = email {
-        get_like("admin", "email", e)[0][1].clone()
+        get_like("admin", "email", e)[0][4].clone()
     } else {
-        get_all_rows("admin", false)[0][1].clone()
+        get_all_rows("admin", false)[0][4].clone()
     };
     gmail::get_access_token(&from_value::<String>(refresh_token))
 }
@@ -552,7 +590,7 @@ fn generate_verification_code() -> String {
         .collect()
 }
 
-pub fn send_verification_email(body: HashMap<&str, &str>) -> String {
+pub fn send_login_email(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("verified").unwrap() == "0" {
             let email = &session.get("not_verified_email").unwrap();
@@ -561,8 +599,8 @@ pub fn send_verification_email(body: HashMap<&str, &str>) -> String {
             gmail::send_email(
                 "",
                 email,
-                "Verify your OLMMCC account",
-                &format!("Hello,\r\nYou requested a verification of your email address by logging in. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you received it in error please contact justus@olmmcc.tk", verification_code),
+                "Verify Your Identity",
+                &format!("Hello,\r\nTo verify your identity, please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you received it in error please contact justus@olmmcc.tk", verification_code),
                 get_access_token(None).as_str(),
             );
             return j_ok(json!({ "success": true }));
@@ -577,8 +615,7 @@ pub fn verify_account(body: HashMap<&str, &str>) -> String {
             if session.get("verification_code").unwrap() == body["code"] {
                 let email = session.get("not_verified_email").unwrap();
                 session.unset("not_verified_email");
-                change_row_where("users", "email", &email, "verified", "1");
-                refresh_session(&mut session, "email", email, None).unwrap();
+                refresh_user_session(&mut session, "email", email, "1");
                 return j_ok(json!({ "success": true }));
             }
         }
