@@ -117,17 +117,13 @@ pub fn signup(body: HashMap<&str, &str>) -> String {
     }
     insert_row(
         "users",
-        vec![
-            "email",
-            "password",
-            "subscription_policy",
-        ],
-        vec![&email, "", "1"],
+        vec!["email", "subscription_policy"],
+        vec![&email, "1"],
     )
     .unwrap();
     let mut session = Session::new(30, 100);
     match refresh_user_session(&mut session, "email", email.clone(), "0") {
-        Some(message) => j_ok(json!({"message": message })),
+        Some(message) => j_ok(json!({ "message": message })),
         None => j_ok(json!({"session" : session.get_id(), "email": email})),
     }
 }
@@ -145,8 +141,8 @@ pub fn admin_login(body: HashMap<&str, &str>) -> String {
     let email = body["email"].to_lowercase();
     let mut session = Session::new(30, 100);
     match refresh_admin_session(&mut session, "email", email, Some(body["password"])) {
-        Err(message) => j_ok(json!({ "message": message })),
-        Ok(verified) => j_ok(json!({"session" : session.get_id(), "verified" : verified})),
+        Some(message) => j_ok(json!({ "message": message })),
+        None => j_ok(json!({"session" : session.get_id()})),
     }
 }
 
@@ -158,8 +154,7 @@ fn refresh_user_session(
 ) -> Option<String> {
     let users = get_like("users", key, &value);
     if let Some(user) = users.iter().next() {
-        session
-            .set("id", from_value::<i32>(user[1].clone()).to_string());
+        session.set("id", from_value::<i32>(user[1].clone()).to_string());
         if verified == "1" {
             session
                 .set("verified", "1".to_string())
@@ -186,44 +181,33 @@ fn refresh_admin_session(
     key: &str,
     value: String,
     password: Option<&str>,
-) -> Result<bool, String> {
-    let users = get_like("users", key, &value);
+) -> Option<String> {
+    let users = get_like("admin", key, &value);
     if let Some(user) = users.iter().next() {
         if let Some(p) = password {
             if !hash_match(p, &from_value::<String>(user[1].clone())) {
-                return Err("Wrong password, please try again.".to_string());
+                return Some("Wrong password, please try again.".to_string());
             }
         }
+        session.set("id", from_value::<i32>(user[2].clone()).to_string());
         session
-            .set("id", from_value::<i32>(user[2].clone()).to_string())
+            .set("email", from_value(user[0].clone()))
+            .set("admin", 1.to_string())
             .set(
-                "invalid_email",
-                from_value::<i32>(user[6].clone()).to_string(),
+                "subscription_policy",
+                from_value::<i32>(user[3].clone()).to_string(),
             );
-        if from_value::<i32>(user[3].clone()) == 1 {
-            session
-                .set("verified", "1".to_string())
-                .set("email", from_value(user[0].clone()))
-                .set("admin", from_value::<i32>(user[4].clone()).to_string())
-                .set(
-                    "subscription_policy",
-                    from_value::<i32>(user[5].clone()).to_string(),
-                );
-            Ok(true)
-        } else {
-            session
-                .set("verified", "0".to_string())
-                .set("not_verified_email", from_value(user[0].clone()));
-            Ok(false)
-        }
+        None
     } else {
-        Err("This email address is not registered. Please create a new account.".to_string())
+        Some("This account is not an administrator account.".to_string())
     }
 }
 
 pub fn get_account(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("verified").unwrap_or_default() == "1" {
+        if session.get("verified").unwrap_or_default() == "1"
+            || session.get("admin").unwrap_or_default() == "1"
+        {
             const ALLOWED_VARS: &[&str] = &["email", "admin", "subscription_policy"];
             let mut map = Map::new();
             for var in ALLOWED_VARS {
@@ -242,63 +226,6 @@ pub fn kill_session(body: HashMap<&str, &str>) -> String {
         session.delete();
     }
     j_ok(json!({}))
-}
-
-pub fn send_password_email(body: HashMap<&str, &str>) -> String {
-    let mut session;
-    let email;
-    if let Some(id) = body.get("session") {
-        session = Session::from_id(id).unwrap();
-        email = session.get("email").unwrap();
-        if session.get("verified").unwrap() != "1" {
-            return ok("");
-        }
-    } else {
-        email = body["email"].to_string();
-        let users = get_like("users", "email", &email);
-        if let None = users.iter().next() {
-            return ok("");
-        }
-        session = Session::new(30, 100);
-        session.set("forgot_password_email", body["email"].to_string());
-    }
-    let password_one = body["password1"];
-    let password_two = body["password2"];
-    if let Some(t) = check_passwords(password_one, password_two) {
-        return message(t);
-    }
-    let password_change_code = generate_verification_code();
-    session.set("password_change_code", password_change_code.clone());
-    session.set("new_password", hash(password_one));
-    gmail::send_email(
-            "",
-            &email,
-            "Verify your Password Change Request",
-            &format!("Hello,\r\nYou requested a change of your password. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", password_change_code),
-            get_access_token(None).as_str(),
-        );
-    return j_ok(json!({ "success": true, "email": email, "session": session.get_id() }));
-}
-
-pub fn change_password(body: HashMap<&str, &str>) -> String {
-    let mut session = Session::from_id(body["session"]).unwrap();
-    if session.get("password_change_code").unwrap() == body["code"] {
-        let email = &session
-            .get("email")
-            .unwrap_or_else(|| session.get("forgot_password_email").unwrap());
-        change_row_where(
-            "users",
-            "email",
-            email,
-            "password",
-            &session.get("new_password").unwrap(),
-        );
-        session.delete();
-        return j_ok(
-            json!({"success" : true, "message" : "Your password was successfully changed!"}),
-        );
-    }
-    ok("")
 }
 
 pub fn refresh(body: HashMap<&str, &str>) -> String {
@@ -327,6 +254,7 @@ pub fn change_subscription(body: HashMap<&str, &str>) -> String {
         "subscription_policy",
         body["subscription"],
     );
+    session.set("subscription_policy", body["subscription"].to_string());
     j_ok(json!({
         "message" : SUBSCRIPTION_MESSAGES[body["subscription"].parse::<usize>().unwrap()]
     }))
@@ -364,10 +292,11 @@ pub fn change_email(body: HashMap<&str, &str>) -> String {
                 let new_email = session.get("new_email").unwrap();
                 session.unset("new_email");
                 change_row_where("users", "id", &id, "email", &new_email);
-                refresh_user_session(&mut session, "id", id, "0").unwrap();
+                refresh_user_session(&mut session, "id", id, "0");
                 return j_ok(json!({ "success": true }));
             }
         }
+        println!("{:?} {}", session.get("email_change_code"), body["code"]);
     }
     j_ok(json!({"success": false}))
 }
@@ -545,10 +474,12 @@ pub fn get_gmail_auth_url(body: HashMap<&str, &str>) -> String {
             let mut contents = String::new();
             file.read_to_string(&mut contents).unwrap();
             let json: Value = serde_json::from_str(&contents).unwrap();
-            return j_ok(json!({"url": &format!(
+            return j_ok(json!({
+                "url": &format!(
                 "https://accounts.google.com/o/oauth2/v2/auth?scope=https://mail.google.com/&include_granted_scopes=true&prompt=consent&redirect_uri=https://www.olmmcc.tk/admin/email/&response_type=code&client_id={}&access_type=offline", 
                 json["client_id"].as_str().unwrap(),
-            )}));
+            )
+            }));
         }
     }
     j_ok(json!({"url": ""}))
