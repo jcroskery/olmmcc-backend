@@ -461,7 +461,9 @@ pub fn change_row(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
             change_row_where(body["table"], "id", body["id"], body["name"], body["value"]);
-            return ok(&format!("Successfully updated row {}.", body["id"]));
+            return j_ok(json!({
+                "message": &format!("Successfully updated row {}.", body["id"])
+            }));
         }
     }
     ok("")
@@ -509,7 +511,15 @@ fn get_access_token(email: Option<&str>) -> String {
     let refresh_token = if let Some(e) = email {
         get_like("admin", "email", e)[0][4].clone()
     } else {
-        get_all_rows("admin", false)[0][4].clone()
+        let mut return_token = mysql::Value::NULL;
+        for row in get_all_rows("admin", false) {
+            let token = row[4].clone();
+            if from_value::<String>(token.clone()) != "" {
+                return_token = token;
+                break;
+            }
+        }
+        return_token
     };
     gmail::get_access_token(&from_value::<String>(refresh_token))
 }
@@ -538,6 +548,15 @@ pub fn send_login_email(body: HashMap<&str, &str>) -> String {
         }
     }
     j_ok(json!({"success": false}))
+}
+
+pub fn hash_password(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]) {
+        if session.get("admin").unwrap() == "1" {
+            return j_ok(json!({"hash": hash(body["password"])}));
+        }
+    }
+    ok("")
 }
 
 pub fn verify_account(body: HashMap<&str, &str>) -> String {
