@@ -282,7 +282,7 @@ fn queue_change_email(session: &mut Session, new_email: &str) -> String {
             email,
             "Verify your Email Change Request",
             &format!("Hello,\r\nYou requested a change of your email address to {}. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", new_email, email_change_code),
-            get_access_token(None).as_str(),
+            get_access_token().as_str(),
         );
         email.to_string()
 }
@@ -341,7 +341,7 @@ fn queue_delete_email(session: &mut Session) -> String {
         email,
         "Verify your Account Deletion Request",
         &format!("Hello,\r\nYou requested a deletion of your OLMMCC account. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", delete_code),
-        get_access_token(None).as_str(),
+        get_access_token().as_str(),
     );
     email.to_string()
 }
@@ -559,22 +559,36 @@ pub fn send_gmail_code(body: HashMap<&str, &str>) -> String {
     j_ok(json!({}))
 }
 
-fn get_access_token(email: Option<&str>) -> String {
-    let refresh_token = if let Some(e) = email {
-        get_like("admin", "email", e)[0][4].clone()
-    } else {
+pub fn is_gmail_working(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]) {
+        if session.get("admin").unwrap() == "1" {
+            if get_refresh_token() == mysql::Value::NULL {
+                return j_ok(json!({"working": false}));
+            } else {
+                return j_ok(json!({"working": true}));
+            }
+        }
+    }
+    j_ok(json!({}))
+}
+
+fn get_refresh_token() -> mysql::Value {
         let mut return_token = mysql::Value::NULL;
         for row in get_all_rows("admin", false) {
             let token = row[4].clone();
-            if from_value::<String>(token.clone()) != "" {
+            if token != mysql::Value::Bytes(vec!()) {
                 return_token = token;
                 break;
             }
         }
         return_token
-    };
+}
+
+fn get_access_token() -> String {
+    let refresh_token = get_refresh_token();
     gmail::get_access_token(&from_value::<String>(refresh_token))
 }
+
 fn generate_verification_code() -> String {
     let mut rng = thread_rng();
     iter::repeat(())
@@ -594,7 +608,7 @@ pub fn send_login_email(body: HashMap<&str, &str>) -> String {
                 email,
                 "Verify Your Identity",
                 &format!("Hello,\r\nTo verify your identity, please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you received it in error please contact justus@olmmcc.tk", verification_code),
-                get_access_token(None).as_str(),
+                get_access_token().as_str(),
             );
             return j_ok(json!({ "success": true }));
         }
@@ -640,7 +654,7 @@ pub fn send_email(body: HashMap<&str, &str>) -> String {
                 },
                 body["subject"],
                 body["body"],
-                get_access_token(None).as_str(),
+                get_access_token().as_str(),
             );
             return j_ok(json!({ "success": true }));
         }

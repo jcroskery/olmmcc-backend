@@ -87,6 +87,7 @@ fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
         "/add_row" => add_row(body),
         "/change_row" => change_row(body),
         "/get_gmail_auth_url" => get_gmail_auth_url(body),
+        "/is_gmail_working" => is_gmail_working(body),
         "/send_gmail_code" => send_gmail_code(body),
         "/send_login_email" => send_login_email(body),
         "/verify_account" => verify_account(body),
