@@ -1,12 +1,8 @@
-pub fn check_passwords(password_one: &str, password_two: &str) -> Option<&'static str> {
-    if password_one == password_two {
-        if password_one.len() <= 128 && password_one.len() >= 8 {
-            None
-        } else {
-            Some("Please use a password between 8 and 128 characters long.")
-        }
+pub fn check_password(password: &str) -> Option<&'static str> {
+    if password.len() <= 128 && password.len() >= 8 {
+        None
     } else {
-        Some("Your passwords do not match. Please try again.")
+        Some("Please use a password between 8 and 128 characters long.")
     }
 }
 pub fn check_email(email: &str) -> Option<&str> {

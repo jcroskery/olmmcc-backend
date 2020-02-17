@@ -152,6 +152,7 @@ fn refresh_user_session(
     value: String,
     verified: &str,
 ) -> Option<String> {
+    session.clear();
     let users = get_like("users", key, &value);
     if let Some(user) = users.iter().next() {
         session.set("id", from_value::<i32>(user[1].clone()).to_string());
@@ -172,7 +173,17 @@ fn refresh_user_session(
             None
         }
     } else {
-        Some("This email address is not registered. Please create a new account.".to_string())
+        let admin = get_like("admin", key, &value);
+        if let Some(admin) = admin.iter().next() {
+            session
+                .set("id", from_value::<i32>(admin[2].clone()).to_string())
+                .set("not_verified_admin", 1.to_string())
+                .set("verified", "0".to_string())
+                .set("not_verified_email", from_value(admin[0].clone()));
+            None
+        } else {
+            Some("This email address is not registered. Please create a new account.".to_string())
+        }
     }
 }
 
@@ -182,6 +193,7 @@ fn refresh_admin_session(
     value: String,
     password: Option<&str>,
 ) -> Option<String> {
+    session.clear();
     let users = get_like("admin", key, &value);
     if let Some(user) = users.iter().next() {
         if let Some(p) = password {
@@ -260,6 +272,21 @@ pub fn change_subscription(body: HashMap<&str, &str>) -> String {
     }))
 }
 
+fn queue_change_email(session: &mut Session, new_email: &str) -> String {
+    let email = &session.get("email").unwrap();
+        let email_change_code = generate_verification_code();
+        session.set("email_change_code", email_change_code.clone());
+        session.set("new_email", new_email.to_string());
+        gmail::send_email(
+            "",
+            email,
+            "Verify your Email Change Request",
+            &format!("Hello,\r\nYou requested a change of your email address to {}. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", new_email, email_change_code),
+            get_access_token(None).as_str(),
+        );
+        email.to_string()
+}
+
 pub fn send_change_email(body: HashMap<&str, &str>) -> String {
     // An email needs to be added to the queue here
     let mut session = Session::from_id(body["session"]).unwrap();
@@ -267,18 +294,7 @@ pub fn send_change_email(body: HashMap<&str, &str>) -> String {
         if let Some(t) = check_email(body["email"]) {
             return message(t);
         }
-        let email = &session.get("email").unwrap();
-        let email_change_code = generate_verification_code();
-        session.set("email_change_code", email_change_code.clone());
-        session.set("new_email", body["email"].to_string());
-        gmail::send_email(
-            "",
-            email,
-            "Verify your Email Change Request",
-            &format!("Hello,\r\nYou requested a change of your email address to {}. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", body["email"], email_change_code),
-            get_access_token(None).as_str(),
-        );
-        j_ok(json!({ "success": true, "email": email }))
+        j_ok(json!({ "success": true, "email": queue_change_email(&mut session, body["email"]) }))
     } else {
         j_ok(json!({ "success": false }))
     }
@@ -286,13 +302,18 @@ pub fn send_change_email(body: HashMap<&str, &str>) -> String {
 
 pub fn change_email(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("verified").unwrap() == "1" {
+        let admin = session.get("admin").unwrap() == "1";
+        if admin || session.get("verified").unwrap() == "1" {
             if session.get("email_change_code").unwrap() == body["code"] {
                 let id = session.get("id").unwrap();
                 let new_email = session.get("new_email").unwrap();
-                session.unset("new_email");
-                change_row_where("users", "id", &id, "email", &new_email);
-                refresh_user_session(&mut session, "id", id, "0");
+                if admin {
+                    change_row_where("admin", "id", &id, "email", &new_email);
+                    refresh_admin_session(&mut session, "id", id, None);
+                } else {
+                    change_row_where("users", "id", &id, "email", &new_email);
+                    refresh_user_session(&mut session, "id", id, "0");
+                }
                 return j_ok(json!({ "success": true }));
             }
         }
@@ -304,29 +325,38 @@ pub fn change_email(body: HashMap<&str, &str>) -> String {
 pub fn send_delete_email(body: HashMap<&str, &str>) -> String {
     // An email needs to be added to the queue here
     let mut session = Session::from_id(body["session"]).unwrap();
-    if session.get("verified").unwrap() == "1" {
-        let email = &session.get("email").unwrap();
-        let delete_code = generate_verification_code();
-        session.set("delete_code", delete_code.clone());
-        gmail::send_email(
-            "",
-            email,
-            "Verify your Account Deletion Request",
-            &format!("Hello,\r\nYou requested a deletion of your OLMMCC account. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", delete_code),
-            get_access_token(None).as_str(),
-        );
-        j_ok(json!({ "success": true, "email": email }))
+    if session.get("admin").unwrap() == "1" || session.get("verified").unwrap() == "1" {
+        j_ok(json!({ "success": true, "email": queue_delete_email(&mut session) }))
     } else {
         j_ok(json!({ "success": false }))
     }
 }
 
+fn queue_delete_email(session: &mut Session) -> String {
+    let email = &session.get("email").unwrap();
+    let delete_code = generate_verification_code();
+    session.set("delete_code", delete_code.clone());
+    gmail::send_email(
+        "",
+        email,
+        "Verify your Account Deletion Request",
+        &format!("Hello,\r\nYou requested a deletion of your OLMMCC account. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", delete_code),
+        get_access_token(None).as_str(),
+    );
+    email.to_string()
+}
+
 pub fn delete_account(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("verified").unwrap() == "1" {
+        let admin = session.get("admin").unwrap() == "1";
+        if admin || session.get("verified").unwrap() == "1" {
             if session.get("delete_code").unwrap() == body["code"] {
                 let id = session.get("id").unwrap();
-                delete_row_where("users", "id", &id);
+                if admin {
+                    delete_row_where("admin", "id", &id);
+                } else {
+                    delete_row_where("users", "id", &id);
+                }
                 return j_ok(json!({ "success": true }));
             }
         }
@@ -430,9 +460,19 @@ pub fn move_row_to_start(body: HashMap<&str, &str>) -> String {
 pub fn delete_row(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
-            delete_row_where(body["table"], "id", body["id"]);
-            let message = format!("Successfully deleted row {}.", body["id"]);
-            return j_ok(json!({"success" : true, "message" : message, "id" : body["id"]}));
+            if body["table"] == "admin" {
+                if session.get("id").unwrap() == body["id"] {
+                    return j_ok(
+                        json!({"success" : false, "authorized" : true, "email": queue_delete_email(&mut session)}),
+                    );
+                } else {
+                    return j_ok(json!({"success" : false, "authorized": false}));
+                }
+            } else {
+                delete_row_where(body["table"], "id", body["id"]);
+                let message = format!("Successfully deleted row {}.", body["id"]);
+                return j_ok(json!({"success" : true, "message" : message, "id" : body["id"]}));
+            }
         }
     }
     ok("")
@@ -460,8 +500,20 @@ pub fn add_row(body: HashMap<&str, &str>) -> String {
 pub fn change_row(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
+            if body["table"] == "admin" {
+                if session.get("id").unwrap() == body["id"] {
+                    if body["name"] == "email" {
+                        return j_ok(
+                        json!({"success" : false, "authorized" : true, "email": queue_change_email(&mut session, body["value"])}),
+                    );
+                    }
+                } else {
+                    return j_ok(json!({"success" : false, "authorized": false}));
+                }
+            }
             change_row_where(body["table"], "id", body["id"], body["name"], body["value"]);
             return j_ok(json!({
+                "success": true,
                 "message": &format!("Successfully updated row {}.", body["id"])
             }));
         }
@@ -564,8 +616,11 @@ pub fn verify_account(body: HashMap<&str, &str>) -> String {
         if session.get("verified").unwrap() == "0" {
             if session.get("verification_code").unwrap() == body["code"] {
                 let email = session.get("not_verified_email").unwrap();
-                session.unset("not_verified_email");
-                refresh_user_session(&mut session, "email", email, "1");
+                if session.get("not_verified_admin").unwrap_or_default() == "1" {
+                    refresh_admin_session(&mut session, "email", email, None);
+                } else {
+                    refresh_user_session(&mut session, "email", email, "1");
+                }
                 return j_ok(json!({ "success": true }));
             }
         }
