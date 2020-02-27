@@ -20,6 +20,7 @@ async fn handle_request(request: Request<Body>) -> Result<Response<Body>, hyper:
                     .iter()
                     .map(|(k, v)| (*k, v.as_str()))
                     .collect();
+                
                 *response.body_mut() = Body::from(olmmcc::formulate_response(&url, body_hash));
             } else {
                 *response.status_mut() = StatusCode::METHOD_NOT_ALLOWED;
@@ -38,7 +39,6 @@ async fn handle_request(request: Request<Body>) -> Result<Response<Body>, hyper:
 
 #[tokio::main]
 async fn main() {
-    // We'll bind to 127.0.0.1:3000
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
 
     let make_svc =
@@ -46,7 +46,6 @@ async fn main() {
 
     let server = Server::bind(&addr).serve(make_svc);
 
-    // Run this server for... forever!
     if let Err(e) = server.await {
         eprintln!("Server error: {}", e);
     }
