@@ -124,7 +124,7 @@ pub fn signup(body: HashMap<&str, &str>) -> String {
     let mut session = Session::new(30, 100);
     match refresh_user_session(&mut session, "email", email.clone(), "0") {
         Some(message) => j_ok(json!({ "message": message })),
-        None => j_ok(json!({"session" : session.get_id(), "email": email})),
+        None => send_login_email(&mut session),
     }
 }
 
@@ -133,8 +133,21 @@ pub fn login(body: HashMap<&str, &str>) -> String {
     let mut session = Session::new(30, 100);
     match refresh_user_session(&mut session, "email", email.clone(), "0") {
         Some(message) => j_ok(json!({ "message": message })),
-        None => j_ok(json!({"session" : session.get_id(), "email": email})),
+        None => send_login_email(&mut session),
     }
+}
+
+fn send_login_email(session: &mut Session) -> String {
+    let email = session.get("not_verified_email").unwrap();
+    let verification_code = generate_verification_code();
+    session.set("verification_code", verification_code.clone());
+    gmail::send_email(
+        vec!(email.clone()),
+        "Verify Your Identity",
+        &format!("Hello,\r\nTo verify your identity, please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you received it in error please contact justus@olmmcc.tk", verification_code),
+        get_access_token().as_str(),
+    );
+    j_ok(json!({"session" : session.get_id(), "email": email}))
 }
 
 pub fn admin_login(body: HashMap<&str, &str>) -> String {
@@ -560,14 +573,12 @@ pub fn send_gmail_code(body: HashMap<&str, &str>) -> String {
 pub fn is_gmail_working(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
-            if get_refresh_token() == mysql::Value::NULL {
-                return j_ok(json!({"working": false}));
-            } else {
+            if get_refresh_token() != mysql::Value::NULL {
                 return j_ok(json!({"working": true}));
             }
         }
     }
-    j_ok(json!({}))
+    j_ok(json!({"working": false}))
 }
 
 fn get_refresh_token() -> mysql::Value {
@@ -593,24 +604,6 @@ fn generate_verification_code() -> String {
         .map(|()| rng.sample(Alphanumeric))
         .take(16)
         .collect()
-}
-
-pub fn send_login_email(body: HashMap<&str, &str>) -> String {
-    if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("verified").unwrap() == "0" {
-            let email = session.get("not_verified_email").unwrap();
-            let verification_code = generate_verification_code();
-            session.set("verification_code", verification_code.clone());
-            gmail::send_email(
-                vec!(email),
-                "Verify Your Identity",
-                &format!("Hello,\r\nTo verify your identity, please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you received it in error please contact justus@olmmcc.tk", verification_code),
-                get_access_token().as_str(),
-            );
-            return j_ok(json!({ "success": true }));
-        }
-    }
-    j_ok(json!({"success": false}))
 }
 
 pub fn hash_password(body: HashMap<&str, &str>) -> String {
@@ -642,7 +635,7 @@ pub fn verify_account(body: HashMap<&str, &str>) -> String {
 pub fn send_email(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
-            let mut emails = vec!();
+            let mut emails = vec![];
             if body["recipients"] == "all_users" {
                 for row in get_some("users", "email") {
                     emails.push(from_value::<String>(row[0].clone()));

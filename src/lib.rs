@@ -1,17 +1,24 @@
 use scrypt::{scrypt_check, scrypt_simple, ScryptParams};
 use serde_json::json;
-use regex::Regex;
 
 use std::collections::HashMap;
-use std::io::prelude::*;
-use std::net::TcpStream;
 
 mod request_functions;
 use request_functions::*;
 
-const BUFFER_SIZE: usize = 128;
+/*
+async fn handle_request(request: Request<Body>) -> Result<Response<Body>, hyper::Error> {
+    let mut response = Response::new(Body::empty());
 
-pub fn handle_connection(mut stream: TcpStream) {
+    match request.method() {
+        &Method::POST => {
+            let full_body = hyper::body::to_bytes(request.into_body()).await?;
+            let 
+        },
+        _ => {
+            *response.status_mut() = StatusCode::NOT_FOUND;
+        },
+    }
     let mut buffer: Vec<u8> = Vec::new();
     let mut eof = false;
     while !eof {
@@ -46,23 +53,14 @@ pub fn handle_connection(mut stream: TcpStream) {
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
 }
-fn get_form_data(body: Vec<&str>) -> HashMap<&str, &str> {
-    let mut hash_map = HashMap::new();
-    for i in 0..(body.len() - 1) {
-        hash_map.insert(
-            body[i].split("name=\"").collect::<Vec<&str>>()[1],
-            body[i + 1].split("\r\n--").collect::<Vec<&str>>()[0],
-        );
-    }
-    hash_map
-}
+*/
 fn ok(body: &str) -> String {
-    format!("HTTP/1.1 200 Ok\r\n\r\n{}", body)
+    body.to_string()
 }
 fn j_ok(body: serde_json::Value) -> String {
-    ok(&body.to_string())
+    body.to_string()
 }
-fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
+pub fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
     match url {
         "/get_songs" => get_songs(),
         "/hash_password" => hash_password(body),
@@ -89,7 +87,6 @@ fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
         "/get_gmail_auth_url" => get_gmail_auth_url(body),
         "/is_gmail_working" => is_gmail_working(body),
         "/send_gmail_code" => send_gmail_code(body),
-        "/send_login_email" => send_login_email(body),
         "/verify_account" => verify_account(body),
         "/send_email" => send_email(body),
         _ => format!(

@@ -1,13 +1,53 @@
-use threadpool::ThreadPool;
+use hyper::service::{make_service_fn, service_fn};
+use hyper::{Body, Request, Response, Server};
+use hyper::{Method, StatusCode};
+use std::collections::HashMap;
+use std::convert::Infallible;
+use std::net::SocketAddr;
 
-use std::net::TcpListener;
+async fn handle_request(request: Request<Body>) -> Result<Response<Body>, hyper::Error> {
+    let mut response = Response::new(Body::empty());
 
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:3000").unwrap();
-    let pool = ThreadPool::new(num_cpus::get() * 2);
-    for stream in listener.incoming() {
-        pool.execute(move || {
-            olmmcc::handle_connection(stream.unwrap());
-        });
+    match request.method() {
+        &Method::POST => {
+            let url = request.uri().to_string();
+            let request_vector = &hyper::body::to_bytes(request.into_body()).await?.to_vec();
+            let request_body = std::str::from_utf8(request_vector).unwrap();
+            if let Ok::<HashMap<&str, String>, _>(string_body_hash) =
+                serde_json::from_str(request_body)
+            {
+                let body_hash = string_body_hash
+                    .iter()
+                    .map(|(k, v)| (*k, v.as_str()))
+                    .collect();
+                *response.body_mut() = Body::from(olmmcc::formulate_response(&url, body_hash));
+            } else {
+                *response.status_mut() = StatusCode::METHOD_NOT_ALLOWED;
+                *response.body_mut() = Body::from(
+                    "The OLMMCC api only supports application/x-www-form-urlencoded.".to_string(),
+                );
+            }
+        }
+        _ => {
+            *response.status_mut() = StatusCode::METHOD_NOT_ALLOWED;
+            *response.body_mut() = Body::from("The OLMMCC api only supports POST.".to_string());
+        }
+    }
+    Ok(response)
+}
+
+#[tokio::main]
+async fn main() {
+    // We'll bind to 127.0.0.1:3000
+    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+
+    let make_svc =
+        make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(handle_request)) });
+
+    let server = Server::bind(&addr).serve(make_svc);
+
+    // Run this server for... forever!
+    if let Err(e) = server.await {
+        eprintln!("Server error: {}", e);
     }
 }
