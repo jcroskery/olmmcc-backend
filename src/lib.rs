@@ -73,10 +73,7 @@ pub fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
         "/send_gmail_code" => send_gmail_code(body),
         "/verify_account" => verify_account(body),
         "/send_email" => send_email(body),
-        _ => format!(
-            "HTTP/1.1 404 Not Found\r\n\r\nThe provided url {} could not be resolved.",
-            url
-        ),
+        _ => message(&format!("The provided url {} could not be resolved.", url))
     }
 }
 
