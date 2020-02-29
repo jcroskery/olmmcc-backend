@@ -44,35 +44,35 @@ struct CalendarEvent {
     notes: String,
 }
 
-pub fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
+pub async fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
     match url {
         "/get_songs" => get_songs(),
         "/hash_password" => hash_password(body),
         "/get_image_list" => get_image_list(),
         "/get_calendar_events" => get_calendar_events(body),
-        "/signup" => signup(body),
-        "/login" => login(body),
+        "/signup" => signup(body).await,
+        "/login" => login(body).await,
         "/admin_login" => admin_login(body),
         "/kill_session" => kill_session(body),
         "/get_account" => get_account(body),
         "/refresh" => refresh(body),
         "/change_subscription" => change_subscription(body),
-        "/send_change_email" => send_change_email(body),
-        "/send_delete_email" => send_delete_email(body),
+        "/send_change_email" => send_change_email(body).await,
+        "/send_delete_email" => send_delete_email(body).await,
         "/change_email" => change_email(body),
         "/delete_account" => delete_account(body),
         "/get_database" => get_database(body),
         "/get_row_titles" => get_row_titles(body),
         "/move_row_to_end" => move_row_to_end(body),
         "/move_row_to_start" => move_row_to_start(body),
-        "/delete_row" => delete_row(body),
+        "/delete_row" => delete_row(body).await,
         "/add_row" => add_row(body),
-        "/change_row" => change_row(body),
+        "/change_row" => change_row(body).await,
         "/get_gmail_auth_url" => get_gmail_auth_url(body),
         "/is_gmail_working" => is_gmail_working(body),
-        "/send_gmail_code" => send_gmail_code(body),
+        "/send_gmail_code" => send_gmail_code(body).await,
         "/verify_account" => verify_account(body),
-        "/send_email" => send_email(body),
+        "/send_email" => send_email(body).await,
         _ => message(&format!("The provided url {} could not be resolved.", url))
     }
 }
@@ -153,7 +153,7 @@ pub fn get_calendar_events(body: HashMap<&str, &str>) -> String {
     serde_json::to_string(&result).unwrap()
 }
 
-pub fn signup(body: HashMap<&str, &str>) -> String {
+pub async fn signup(body: HashMap<&str, &str>) -> String {
     let email = body["email"].to_lowercase();
     if let Some(t) = check_email(&email) {
         return message(t);
@@ -167,29 +167,31 @@ pub fn signup(body: HashMap<&str, &str>) -> String {
     let mut session = Session::new(30, 100);
     match refresh_user_session(&mut session, "email", email.clone(), "0") {
         Some(t) => message(&t),
-        None => send_login_email(&mut session),
+        None => send_login_email(&mut session).await,
     }
 }
 
-pub fn login(body: HashMap<&str, &str>) -> String {
+pub async fn login(body: HashMap<&str, &str>) -> String {
     let email = body["email"].to_lowercase();
     let mut session = Session::new(30, 100);
     match refresh_user_session(&mut session, "email", email.clone(), "0") {
         Some(t) => message(&t),
-        None => send_login_email(&mut session),
+        None => send_login_email(&mut session).await,
     }
 }
 
-fn send_login_email(session: &mut Session) -> String {
+async fn send_login_email(session: &mut Session) -> String {
     let email = session.get("not_verified_email").unwrap();
     let verification_code = generate_verification_code();
     session.set("verification_code", verification_code.clone());
+    let access_token = get_access_token().await;
+    let body = format!("Hello,\r\nTo verify your identity, please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you received it in error please contact justus@olmmcc.tk", verification_code);
     gmail::send_email(
         vec!(email.clone()),
         "Verify Your Identity",
-        &format!("Hello,\r\nTo verify your identity, please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you received it in error please contact justus@olmmcc.tk", verification_code),
-        get_access_token().as_str(),
-    );
+        &body,
+        &access_token,
+    ).await;
     json!({"session" : session.get_id(), "email": email}).to_string()
 }
 
@@ -326,28 +328,30 @@ pub fn change_subscription(body: HashMap<&str, &str>) -> String {
     message(SUBSCRIPTION_MESSAGES[body["subscription"].parse::<usize>().unwrap()])
 }
 
-fn queue_change_email(session: &mut Session, new_email: &str) -> String {
+async fn queue_change_email(session: &mut Session, new_email: &str) -> String {
     let email = session.get("email").unwrap();
     let email_change_code = generate_verification_code();
     session.set("email_change_code", email_change_code.clone());
     session.set("new_email", new_email.to_string());
+    let body = format!("Hello,\r\nYou requested a change of your email address to {}. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", new_email, email_change_code);
+    let access_token = get_access_token().await;
     gmail::send_email(
             vec!(email.clone()),
             "Verify your Email Change Request",
-            &format!("Hello,\r\nYou requested a change of your email address to {}. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", new_email, email_change_code),
-            get_access_token().as_str(),
-        );
+            &body,
+            &access_token,
+        ).await;
     email
 }
 
-pub fn send_change_email(body: HashMap<&str, &str>) -> String {
+pub async fn send_change_email(body: HashMap<&str, &str>) -> String {
     // An email needs to be added to the queue here
     let mut session = Session::from_id(body["session"]).unwrap();
     if session.get("verified").unwrap() == "1" {
         if let Some(t) = check_email(body["email"]) {
             return message(t);
         }
-        json!({ "success": true, "email": queue_change_email(&mut session, body["email"]) }).to_string()
+        json!({ "success": true, "email": queue_change_email(&mut session, body["email"]).await }).to_string()
     } else {
         json!({ "success": false }).to_string()
     }
@@ -375,26 +379,28 @@ pub fn change_email(body: HashMap<&str, &str>) -> String {
     json!({"success": false}).to_string()
 }
 
-pub fn send_delete_email(body: HashMap<&str, &str>) -> String {
+pub async fn send_delete_email(body: HashMap<&str, &str>) -> String {
     // An email needs to be added to the queue here
     let mut session = Session::from_id(body["session"]).unwrap();
     if session.get("admin").unwrap() == "1" || session.get("verified").unwrap() == "1" {
-        json!({ "success": true, "email": queue_delete_email(&mut session) }).to_string()
+        json!({ "success": true, "email": queue_delete_email(&mut session).await }).to_string()
     } else {
         json!({ "success": false }).to_string()
     }
 }
 
-fn queue_delete_email(session: &mut Session) -> String {
+async fn queue_delete_email(session: &mut Session) -> String {
     let email = session.get("email").unwrap();
     let delete_code = generate_verification_code();
     session.set("delete_code", delete_code.clone());
+    let body = format!("Hello,\r\nYou requested a deletion of your OLMMCC account. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", delete_code);
+    let access_token = get_access_token().await;
     gmail::send_email(
         vec!(email.clone()),
         "Verify your Account Deletion Request",
-        &format!("Hello,\r\nYou requested a deletion of your OLMMCC account. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", delete_code),
-        get_access_token().as_str(),
-    );
+        &body,
+        &access_token,
+    ).await;
     email
 }
 
@@ -507,13 +513,13 @@ pub fn move_row_to_start(body: HashMap<&str, &str>) -> String {
     json!({}).to_string()
 }
 
-pub fn delete_row(body: HashMap<&str, &str>) -> String {
+pub async fn delete_row(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
             if body["table"] == "admin" {
                 if session.get("id").unwrap() == body["id"] {
                     return 
-                        json!({"success" : false, "authorized" : true, "email": queue_delete_email(&mut session)}).to_string();
+                        json!({"success" : false, "authorized" : true, "email": queue_delete_email(&mut session).await}).to_string();
                 } else {
                     return json!({"success" : false, "authorized": false}).to_string();
                 }
@@ -545,14 +551,14 @@ pub fn add_row(body: HashMap<&str, &str>) -> String {
     json!({}).to_string()
 }
 
-pub fn change_row(body: HashMap<&str, &str>) -> String {
+pub async fn change_row(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
             if body["table"] == "admin" {
                 if session.get("id").unwrap() == body["id"] {
                     if body["name"] == "email" {
                         return 
-                            json!({"success" : false, "authorized" : true, "email": queue_change_email(&mut session, body["value"])}).to_string();
+                            json!({"success" : false, "authorized" : true, "email": queue_change_email(&mut session, body["value"]).await}).to_string();
                     }
                 } else {
                     return json!({"success" : false, "authorized": false}).to_string();
@@ -586,18 +592,18 @@ pub fn get_gmail_auth_url(body: HashMap<&str, &str>) -> String {
     json!({"url": ""}).to_string()
 }
 
-pub fn send_gmail_code(body: HashMap<&str, &str>) -> String {
+pub async fn send_gmail_code(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
             let refresh_token = gmail::get_refresh_token(body["code"]);
             let email = &session.get("email").unwrap();
             if row_exists("admin", "email", email) {
-                change_row_where("admin", "email", email, "refresh_token", &refresh_token);
+                change_row_where("admin", "email", email, "refresh_token", &refresh_token.await);
             } else {
                 insert_row(
                     "admin",
                     vec!["email", "refresh_token"],
-                    vec![email, &refresh_token],
+                    vec![email, &refresh_token.await],
                 )
                 .unwrap();
             }
@@ -629,9 +635,9 @@ fn get_refresh_token() -> mysql::Value {
     return_token
 }
 
-fn get_access_token() -> String {
+async fn get_access_token() -> String {
     let refresh_token = get_refresh_token();
-    gmail::get_access_token(&from_value::<String>(refresh_token))
+    gmail::get_access_token(&from_value::<String>(refresh_token)).await
 }
 
 fn generate_verification_code() -> String {
@@ -671,7 +677,7 @@ pub fn verify_account(body: HashMap<&str, &str>) -> String {
     json!({"success": false}).to_string()
 }
 
-pub fn send_email(body: HashMap<&str, &str>) -> String {
+pub async fn send_email(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
             let mut emails = vec![];
@@ -689,8 +695,8 @@ pub fn send_email(body: HashMap<&str, &str>) -> String {
                 emails,
                 body["subject"],
                 body["body"],
-                get_access_token().as_str(),
-            );
+                get_access_token().await.as_str(),
+            ).await;
             return json!({ "success": true }).to_string();
         }
     }

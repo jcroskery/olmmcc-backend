@@ -20,8 +20,8 @@ async fn handle_request(request: Request<Body>) -> Result<Response<Body>, hyper:
                     .iter()
                     .map(|(k, v)| (*k, v.as_str()))
                     .collect();
-                
-                *response.body_mut() = Body::from(olmmcc::formulate_response(&url, body_hash));
+                let response_body = olmmcc::formulate_response(&url, body_hash).await;
+                *response.body_mut() = Body::from(response_body);
             } else {
                 *response.status_mut() = StatusCode::METHOD_NOT_ALLOWED;
                 *response.body_mut() = Body::from(
