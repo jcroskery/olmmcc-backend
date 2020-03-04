@@ -47,7 +47,7 @@ struct CalendarEvent {
 pub async fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
     match url {
         "/get_songs" => get_songs().await,
-        "/hash_password" => hash_password(body),
+        "/hash_password" => hash_password(body).await,
         "/get_image_list" => get_image_list(),
         "/get_calendar_events" => get_calendar_events(body).await,
         "/signup" => signup(body).await,
@@ -68,7 +68,7 @@ pub async fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String 
         "/delete_row" => delete_row(body).await,
         "/add_row" => add_row(body).await,
         "/change_row" => change_row(body).await,
-        "/get_gmail_auth_url" => get_gmail_auth_url(body),
+        "/get_gmail_auth_url" => get_gmail_auth_url(body).await,
         "/is_gmail_working" => is_gmail_working(body).await,
         "/send_gmail_code" => send_gmail_code(body).await,
         "/verify_account" => verify_account(body).await,
@@ -164,7 +164,7 @@ pub async fn signup(body: HashMap<&str, &str>) -> String {
         vec![&email, "1"],
     ).await
     .unwrap();
-    let mut session = Session::new(30, 100);
+    let mut session = Session::new(30, 100).await;
     match refresh_user_session(&mut session, "email", email.clone(), "0").await {
         Some(t) => message(&t),
         None => send_login_email(&mut session).await,
@@ -173,7 +173,7 @@ pub async fn signup(body: HashMap<&str, &str>) -> String {
 
 pub async fn login(body: HashMap<&str, &str>) -> String {
     let email = body["email"].to_lowercase();
-    let mut session = Session::new(30, 100);
+    let mut session = Session::new(30, 100).await;
     match refresh_user_session(&mut session, "email", email.clone(), "0").await {
         Some(t) => message(&t),
         None => send_login_email(&mut session).await,
@@ -181,9 +181,9 @@ pub async fn login(body: HashMap<&str, &str>) -> String {
 }
 
 async fn send_login_email(session: &mut Session) -> String {
-    let email = session.get("not_verified_email").unwrap();
+    let email = session.get("not_verified_email").await.unwrap();
     let verification_code = generate_verification_code();
-    session.set("verification_code", verification_code.clone());
+    session.set("verification_code", verification_code.clone()).await;
     let access_token = get_access_token().await;
     let body = format!("Hello,\r\nTo verify your identity, please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you received it in error please contact justus@olmmcc.tk", verification_code);
     gmail::send_email(
@@ -197,7 +197,7 @@ async fn send_login_email(session: &mut Session) -> String {
 
 pub async fn admin_login(body: HashMap<&str, &str>) -> String {
     let email = body["email"].to_lowercase();
-    let mut session = Session::new(30, 100);
+    let mut session = Session::new(30, 100).await;
     match refresh_admin_session(&mut session, "email", email, Some(body["password"])).await {
         Some(t) => message(&t),
         None => json!({"session" : session.get_id()}).to_string(),
@@ -210,34 +210,34 @@ async fn refresh_user_session(
     value: String,
     verified: &str,
 ) -> Option<String> {
-    session.clear();
+    session.clear().await;
     let users = get_like("users", key, &value).await;
     if let Some(user) = users.iter().next() {
-        session.set("id", from_value::<i32>(user[1].clone()).to_string());
+        session.set("id", from_value::<i32>(user[1].clone()).to_string()).await;
         if verified == "1" {
             session
-                .set("verified", "1".to_string())
-                .set("email", from_value(user[0].clone()))
-                .set("admin", 0.to_string())
+                .set("verified", "1".to_string()).await
+                .set("email", from_value(user[0].clone())).await
+                .set("admin", 0.to_string()).await
                 .set(
                     "subscription_policy",
                     from_value::<i32>(user[2].clone()).to_string(),
-                );
+                ).await;
             None
         } else {
             session
-                .set("verified", "0".to_string())
-                .set("not_verified_email", from_value(user[0].clone()));
+                .set("verified", "0".to_string()).await
+                .set("not_verified_email", from_value(user[0].clone())).await;
             None
         }
     } else {
         let admin = get_like("admin", key, &value).await;
         if let Some(admin) = admin.iter().next() {
             session
-                .set("id", from_value::<i32>(admin[2].clone()).to_string())
-                .set("not_verified_admin", 1.to_string())
-                .set("verified", "0".to_string())
-                .set("not_verified_email", from_value(admin[0].clone()));
+                .set("id", from_value::<i32>(admin[2].clone()).to_string()).await
+                .set("not_verified_admin", 1.to_string()).await
+                .set("verified", "0".to_string()).await
+                .set("not_verified_email", from_value(admin[0].clone())).await;
             None
         } else {
             Some("This email address is not registered. Please create a new account.".to_string())
@@ -251,7 +251,7 @@ async fn refresh_admin_session(
     value: String,
     password: Option<&str>,
 ) -> Option<String> {
-    session.clear();
+    session.clear().await;
     let users = get_like("admin", key, &value).await;
     if let Some(user) = users.iter().next() {
         if let Some(p) = password {
@@ -259,14 +259,14 @@ async fn refresh_admin_session(
                 return Some("Wrong password, please try again.".to_string());
             }
         }
-        session.set("id", from_value::<i32>(user[2].clone()).to_string());
+        session.set("id", from_value::<i32>(user[2].clone()).to_string()).await;
         session
-            .set("email", from_value(user[0].clone()))
-            .set("admin", 1.to_string())
+            .set("email", from_value(user[0].clone())).await
+            .set("admin", 1.to_string()).await
             .set(
                 "subscription_policy",
                 from_value::<i32>(user[3].clone()).to_string(),
-            );
+            ).await;
         None
     } else {
         Some("This account is not an administrator account.".to_string())
@@ -274,15 +274,15 @@ async fn refresh_admin_session(
 }
 
 pub async fn get_account(body: HashMap<&str, &str>) -> String {
-    if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("verified").unwrap_or_default() == "1"
-            || session.get("admin").unwrap_or_default() == "1"
+    if let Some(mut session) = Session::from_id(body["session"]).await {
+        if session.get("verified").await.unwrap_or_default() == "1"
+            || session.get("admin").await.unwrap_or_default() == "1"
         {
             const ALLOWED_VARS: &[&str] = &["email", "admin", "subscription_policy"];
             let mut map = Map::new();
             for var in ALLOWED_VARS {
                 if body["details"].contains(var) {
-                    map.insert(var.to_string(), Value::String(session.get(var).unwrap()));
+                    map.insert(var.to_string(), Value::String(session.get(var).await.unwrap()));
                 }
             }
             return serde_json::to_string(&map).unwrap();
@@ -292,16 +292,16 @@ pub async fn get_account(body: HashMap<&str, &str>) -> String {
 }
 
 pub async fn kill_session(body: HashMap<&str, &str>) -> String {
-    if let Some(mut session) = Session::from_id(body["session"]) {
-        session.delete();
+    if let Some(mut session) = Session::from_id(body["session"]).await {
+        session.delete().await;
     }
     json!({}).to_string()
 }
 
 pub async fn refresh(body: HashMap<&str, &str>) -> String {
-    if let Some(mut session) = Session::from_id(body["session"]) {
-        let id = session.get("id").unwrap();
-        let verified = &session.get("verified").unwrap();
+    if let Some(mut session) = Session::from_id(body["session"]).await {
+        let id = session.get("id").await.unwrap();
+        let verified = &session.get("verified").await.unwrap();
         refresh_user_session(&mut session, "id", id, verified).await.unwrap();
     }
     json!({}).to_string()
@@ -313,26 +313,26 @@ pub async fn change_subscription(body: HashMap<&str, &str>) -> String {
         "You are now subscribed to receive emails.",
         "You are now subscribed to receive emails and reminders.",
     ];
-    let mut session = Session::from_id(body["session"]).unwrap();
+    let mut session = Session::from_id(body["session"]).await.unwrap();
     if let Some(t) = check_subscription(body["subscription"]) {
         return message(&t);
     }
     change_row_where(
         "users",
         "id",
-        &session.get("id").unwrap(),
+        &session.get("id").await.unwrap(),
         "subscription_policy",
         body["subscription"],
     ).await;
-    session.set("subscription_policy", body["subscription"].to_string());
+    session.set("subscription_policy", body["subscription"].to_string()).await;
     message(SUBSCRIPTION_MESSAGES[body["subscription"].parse::<usize>().unwrap()])
 }
 
 async fn queue_change_email(session: &mut Session, new_email: &str) -> String {
-    let email = session.get("email").unwrap();
+    let email = session.get("email").await.unwrap();
     let email_change_code = generate_verification_code();
-    session.set("email_change_code", email_change_code.clone());
-    session.set("new_email", new_email.to_string());
+    session.set("email_change_code", email_change_code.clone()).await;
+    session.set("new_email", new_email.to_string()).await;
     let body = format!("Hello,\r\nYou requested a change of your email address to {}. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", new_email, email_change_code);
     let access_token = get_access_token().await;
     gmail::send_email(
@@ -346,8 +346,8 @@ async fn queue_change_email(session: &mut Session, new_email: &str) -> String {
 
 pub async fn send_change_email(body: HashMap<&str, &str>) -> String {
     // An email needs to be added to the queue here
-    let mut session = Session::from_id(body["session"]).unwrap();
-    if session.get("verified").unwrap() == "1" {
+    let mut session = Session::from_id(body["session"]).await.unwrap();
+    if session.get("verified").await.unwrap() == "1" {
         if let Some(t) = check_email(body["email"]).await {
             return message(t);
         }
@@ -358,12 +358,12 @@ pub async fn send_change_email(body: HashMap<&str, &str>) -> String {
 }
 
 pub async fn change_email(body: HashMap<&str, &str>) -> String {
-    if let Some(mut session) = Session::from_id(body["session"]) {
-        let admin = session.get("admin").unwrap() == "1";
-        if admin || session.get("verified").unwrap() == "1" {
-            if session.get("email_change_code").unwrap() == body["code"] {
-                let id = session.get("id").unwrap();
-                let new_email = session.get("new_email").unwrap();
+    if let Some(mut session) = Session::from_id(body["session"]).await {
+        let admin = session.get("admin").await.unwrap() == "1";
+        if admin || session.get("verified").await.unwrap() == "1" {
+            if session.get("email_change_code").await.unwrap() == body["code"] {
+                let id = session.get("id").await.unwrap();
+                let new_email = session.get("new_email").await.unwrap();
                 if admin {
                     change_row_where("admin", "id", &id, "email", &new_email).await;
                     refresh_admin_session(&mut session, "id", id, None).await;
@@ -374,15 +374,15 @@ pub async fn change_email(body: HashMap<&str, &str>) -> String {
                 return json!({ "success": true }).to_string();
             }
         }
-        println!("{:?} {}", session.get("email_change_code"), body["code"]);
+        println!("{:?} {}", session.get("email_change_code").await, body["code"]);
     }
     json!({"success": false}).to_string()
 }
 
 pub async fn send_delete_email(body: HashMap<&str, &str>) -> String {
     // An email needs to be added to the queue here
-    let mut session = Session::from_id(body["session"]).unwrap();
-    if session.get("admin").unwrap() == "1" || session.get("verified").unwrap() == "1" {
+    let mut session = Session::from_id(body["session"]).await.unwrap();
+    if session.get("admin").await.unwrap() == "1" || session.get("verified").await.unwrap() == "1" {
         json!({ "success": true, "email": queue_delete_email(&mut session).await }).to_string()
     } else {
         json!({ "success": false }).to_string()
@@ -390,9 +390,9 @@ pub async fn send_delete_email(body: HashMap<&str, &str>) -> String {
 }
 
 async fn queue_delete_email(session: &mut Session) -> String {
-    let email = session.get("email").unwrap();
+    let email = session.get("email").await.unwrap();
     let delete_code = generate_verification_code();
-    session.set("delete_code", delete_code.clone());
+    session.set("delete_code", delete_code.clone()).await;
     let body = format!("Hello,\r\nYou requested a deletion of your OLMMCC account. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", delete_code);
     let access_token = get_access_token().await;
     gmail::send_email(
@@ -405,11 +405,11 @@ async fn queue_delete_email(session: &mut Session) -> String {
 }
 
 pub async fn delete_account(body: HashMap<&str, &str>) -> String {
-    if let Some(mut session) = Session::from_id(body["session"]) {
-        let admin = session.get("admin").unwrap() == "1";
-        if admin || session.get("verified").unwrap() == "1" {
-            if session.get("delete_code").unwrap() == body["code"] {
-                let id = session.get("id").unwrap();
+    if let Some(mut session) = Session::from_id(body["session"]).await {
+        let admin = session.get("admin").await.unwrap() == "1";
+        if admin || session.get("verified").await.unwrap() == "1" {
+            if session.get("delete_code").await.unwrap() == body["code"] {
+                let id = session.get("id").await.unwrap();
                 if admin {
                     delete_row_where("admin", "id", &id).await;
                 } else {
@@ -431,8 +431,8 @@ async fn get_column_types(table: &str) -> Vec<String> {
 }
 
 pub async fn get_database(body: HashMap<&str, &str>) -> String {
-    if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("admin").unwrap() == "1" {
+    if let Some(mut session) = Session::from_id(body["session"]).await {
+        if session.get("admin").await.unwrap() == "1" {
             let mut column_names = Vec::new();
             for column in get_column_details(body["table"]).await {
                 column_names.push(from_value::<String>(column[0].clone()));
@@ -464,8 +464,8 @@ fn push_value(column_type: &str, value: mysql_async::Value, vec: &mut Vec<String
 }
 
 pub async fn get_row_titles(body: HashMap<&str, &str>) -> String {
-    if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("admin").unwrap() == "1" {
+    if let Some(mut session) = Session::from_id(body["session"]).await {
+        if session.get("admin").await.unwrap() == "1" {
             let mut titles: Vec<String> = Vec::new();
             for title in get_some(body["table"], "title").await {
                 titles.push(from_value(title[0].clone()));
@@ -487,8 +487,8 @@ async fn return_row(table: &str, id: i32) -> Vec<String> {
 }
 
 pub async fn move_row_to_end(body: HashMap<&str, &str>) -> String {
-    if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("admin").unwrap() == "1" {
+    if let Some(mut session) = Session::from_id(body["session"]).await {
+        if session.get("admin").await.unwrap() == "1" {
             let new_id = get_max_id(body["table"]).await + 1;
             change_row_where(body["table"], "id", body["id"], "id", &new_id.to_string()).await;
             let message = format!("Successfully moved row {} to end.", body["id"]);
@@ -501,8 +501,8 @@ pub async fn move_row_to_end(body: HashMap<&str, &str>) -> String {
 }
 
 pub async fn move_row_to_start(body: HashMap<&str, &str>) -> String {
-    if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("admin").unwrap() == "1" {
+    if let Some(mut session) = Session::from_id(body["session"]).await {
+        if session.get("admin").await.unwrap() == "1" {
             let new_id = get_min_id(body["table"]).await - 1;
             change_row_where(body["table"], "id", body["id"], "id", &new_id.to_string()).await;
             let message = format!("Successfully moved row {} to start.", body["id"]);
@@ -515,10 +515,10 @@ pub async fn move_row_to_start(body: HashMap<&str, &str>) -> String {
 }
 
 pub async fn delete_row(body: HashMap<&str, &str>) -> String {
-    if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("admin").unwrap() == "1" {
+    if let Some(mut session) = Session::from_id(body["session"]).await {
+        if session.get("admin").await.unwrap() == "1" {
             if body["table"] == "admin" {
-                if session.get("id").unwrap() == body["id"] {
+                if session.get("id").await.unwrap() == body["id"] {
                     return 
                         json!({"success" : false, "authorized" : true, "email": queue_delete_email(&mut session).await}).to_string();
                 } else {
@@ -535,8 +535,8 @@ pub async fn delete_row(body: HashMap<&str, &str>) -> String {
 }
 
 pub async fn add_row(body: HashMap<&str, &str>) -> String {
-    if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("admin").unwrap() == "1" {
+    if let Some(mut session) = Session::from_id(body["session"]).await {
+        if session.get("admin").await.unwrap() == "1" {
             let names = serde_json::from_str(body["names"]).unwrap();
             let values = serde_json::from_str(body["values"]).unwrap();
             if let Err(e) = insert_row(body["table"], names, values).await {
@@ -554,10 +554,10 @@ pub async fn add_row(body: HashMap<&str, &str>) -> String {
 }
 
 pub async fn change_row(body: HashMap<&str, &str>) -> String {
-    if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("admin").unwrap() == "1" {
+    if let Some(mut session) = Session::from_id(body["session"]).await {
+        if session.get("admin").await.unwrap() == "1" {
             if body["table"] == "admin" {
-                if session.get("id").unwrap() == body["id"] {
+                if session.get("id").await.unwrap() == body["id"] {
                     if body["name"] == "email" {
                         return 
                             json!({"success" : false, "authorized" : true, "email": queue_change_email(&mut session, body["value"]).await}).to_string();
@@ -576,9 +576,9 @@ pub async fn change_row(body: HashMap<&str, &str>) -> String {
     json!({}).to_string()
 }
 
-pub fn get_gmail_auth_url(body: HashMap<&str, &str>) -> String {
-    if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("admin").unwrap() == "1" {
+pub async fn get_gmail_auth_url(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]).await {
+        if session.get("admin").await.unwrap() == "1" {
             let mut file = File::open("/home/justus/client_secret.json").unwrap();
             let mut contents = String::new();
             file.read_to_string(&mut contents).unwrap();
@@ -595,10 +595,10 @@ pub fn get_gmail_auth_url(body: HashMap<&str, &str>) -> String {
 }
 
 pub async fn send_gmail_code(body: HashMap<&str, &str>) -> String {
-    if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("admin").unwrap() == "1" {
+    if let Some(mut session) = Session::from_id(body["session"]).await {
+        if session.get("admin").await.unwrap() == "1" {
             let refresh_token = gmail::get_refresh_token(body["code"]);
-            let email = &session.get("email").unwrap();
+            let email = &session.get("email").await.unwrap();
             if row_exists("admin", "email", email).await {
                 change_row_where("admin", "email", email, "refresh_token", &refresh_token.await).await;
             } else {
@@ -615,8 +615,8 @@ pub async fn send_gmail_code(body: HashMap<&str, &str>) -> String {
 }
 
 pub async fn is_gmail_working(body: HashMap<&str, &str>) -> String {
-    if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("admin").unwrap() == "1" {
+    if let Some(mut session) = Session::from_id(body["session"]).await {
+        if session.get("admin").await.unwrap() == "1" {
             if get_refresh_token().await != mysql_async::Value::NULL {
                 return json!({"working": true}).to_string();
             }
@@ -650,9 +650,9 @@ fn generate_verification_code() -> String {
         .collect()
 }
 
-pub fn hash_password(body: HashMap<&str, &str>) -> String {
-    if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("admin").unwrap() == "1" {
+pub async fn hash_password(body: HashMap<&str, &str>) -> String {
+    if let Some(mut session) = Session::from_id(body["session"]).await {
+        if session.get("admin").await.unwrap() == "1" {
             if let Some(t) = check_password(body["password"]) {
                 return message(t);
             }
@@ -663,11 +663,11 @@ pub fn hash_password(body: HashMap<&str, &str>) -> String {
 }
 
 pub async fn verify_account(body: HashMap<&str, &str>) -> String {
-    if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("verified").unwrap() == "0" {
-            if session.get("verification_code").unwrap() == body["code"] {
-                let email = session.get("not_verified_email").unwrap();
-                if session.get("not_verified_admin").unwrap_or_default() == "1" {
+    if let Some(mut session) = Session::from_id(body["session"]).await {
+        if session.get("verified").await.unwrap() == "0" {
+            if session.get("verification_code").await.unwrap() == body["code"] {
+                let email = session.get("not_verified_email").await.unwrap();
+                if session.get("not_verified_admin").await.unwrap_or_default() == "1" {
                     refresh_admin_session(&mut session, "email", email, None).await;
                 } else {
                     refresh_user_session(&mut session, "email", email, "1").await;
@@ -680,8 +680,8 @@ pub async fn verify_account(body: HashMap<&str, &str>) -> String {
 }
 
 pub async fn send_email(body: HashMap<&str, &str>) -> String {
-    if let Some(mut session) = Session::from_id(body["session"]) {
-        if session.get("admin").unwrap() == "1" {
+    if let Some(mut session) = Session::from_id(body["session"]).await {
+        if session.get("admin").await.unwrap() == "1" {
             let mut emails = vec![];
             if body["recipients"] == "all_users" {
                 for row in get_some("users", "email").await {
