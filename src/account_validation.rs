@@ -5,9 +5,9 @@ pub fn check_password(password: &str) -> Option<&'static str> {
         Some("Please use a password between 8 and 128 characters long.")
     }
 }
-pub fn check_email(email: &str) -> Option<&str> {
+pub async fn check_email(email: &str) -> Option<&str> {
     if email.len() <= 64 {
-        if let None = super::database_functions::get_like("users", "email", email).get(0) {
+        if let None = super::database_functions::get_like("users", "email", email).await.get(0) {
             None
         } else {
             Some("Sorry, your email address has already been registered. Please use a different email address or log in with your account.")

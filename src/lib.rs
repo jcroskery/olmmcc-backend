@@ -1,6 +1,6 @@
 use scrypt::{scrypt_check, scrypt_simple, ScryptParams};
 use chrono::NaiveDate;
-use mysql::from_value;
+use mysql_async::from_value;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 use rand::distributions::Alphanumeric;
@@ -46,32 +46,32 @@ struct CalendarEvent {
 
 pub async fn formulate_response(url: &str, body: HashMap<&str, &str>) -> String {
     match url {
-        "/get_songs" => get_songs(),
+        "/get_songs" => get_songs().await,
         "/hash_password" => hash_password(body),
         "/get_image_list" => get_image_list(),
-        "/get_calendar_events" => get_calendar_events(body),
+        "/get_calendar_events" => get_calendar_events(body).await,
         "/signup" => signup(body).await,
         "/login" => login(body).await,
-        "/admin_login" => admin_login(body),
-        "/kill_session" => kill_session(body),
-        "/get_account" => get_account(body),
-        "/refresh" => refresh(body),
-        "/change_subscription" => change_subscription(body),
+        "/admin_login" => admin_login(body).await,
+        "/kill_session" => kill_session(body).await,
+        "/get_account" => get_account(body).await,
+        "/refresh" => refresh(body).await,
+        "/change_subscription" => change_subscription(body).await,
         "/send_change_email" => send_change_email(body).await,
         "/send_delete_email" => send_delete_email(body).await,
-        "/change_email" => change_email(body),
-        "/delete_account" => delete_account(body),
-        "/get_database" => get_database(body),
-        "/get_row_titles" => get_row_titles(body),
-        "/move_row_to_end" => move_row_to_end(body),
-        "/move_row_to_start" => move_row_to_start(body),
+        "/change_email" => change_email(body).await,
+        "/delete_account" => delete_account(body).await,
+        "/get_database" => get_database(body).await,
+        "/get_row_titles" => get_row_titles(body).await,
+        "/move_row_to_end" => move_row_to_end(body).await,
+        "/move_row_to_start" => move_row_to_start(body).await,
         "/delete_row" => delete_row(body).await,
-        "/add_row" => add_row(body),
+        "/add_row" => add_row(body).await,
         "/change_row" => change_row(body).await,
         "/get_gmail_auth_url" => get_gmail_auth_url(body),
-        "/is_gmail_working" => is_gmail_working(body),
+        "/is_gmail_working" => is_gmail_working(body).await,
         "/send_gmail_code" => send_gmail_code(body).await,
-        "/verify_account" => verify_account(body),
+        "/verify_account" => verify_account(body).await,
         "/send_email" => send_email(body).await,
         _ => message(&format!("The provided url {} could not be resolved.", url))
     }
@@ -87,13 +87,13 @@ fn hash_match(password: &str, hash: &str) -> bool {
     scrypt_check(password, hash).is_ok()
 }
 
-pub fn get_songs() -> String {
+pub async fn get_songs() -> String {
     let mut expiry = 0;
     let current_time = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    let mut article: Vec<SongArticle> = get_all_rows("articles", true)
+    let mut article: Vec<SongArticle> = get_all_rows("articles", true).await
         .iter()
         .filter(|row| {
             let this_expiry = from_value::<NaiveDate>(row[3].clone())
@@ -114,7 +114,7 @@ pub fn get_songs() -> String {
         .collect();
     match article.pop() {
         Some(mut t) => {
-            t.songs = get_like("songs", "article", &t.title)
+            t.songs = get_like("songs", "article", &t.title).await
                 .into_iter()
                 .map(|x| Song {
                     name: from_value(x[1].clone()),
@@ -136,8 +136,8 @@ pub fn get_image_list() -> String {
     json!({ "images": paths }).to_string()
 }
 
-pub fn get_calendar_events(body: HashMap<&str, &str>) -> String {
-    let result: Vec<CalendarEvent> = get_like("calendar", "date", body["year_month"])
+pub async fn get_calendar_events(body: HashMap<&str, &str>) -> String {
+    let result: Vec<CalendarEvent> = get_like("calendar", "date", body["year_month"]).await
         .iter()
         .map(|x| CalendarEvent {
             id: from_value(x[0].clone()),
@@ -155,17 +155,17 @@ pub fn get_calendar_events(body: HashMap<&str, &str>) -> String {
 
 pub async fn signup(body: HashMap<&str, &str>) -> String {
     let email = body["email"].to_lowercase();
-    if let Some(t) = check_email(&email) {
+    if let Some(t) = check_email(&email).await {
         return message(t);
     }
     insert_row(
         "users",
         vec!["email", "subscription_policy"],
         vec![&email, "1"],
-    )
+    ).await
     .unwrap();
     let mut session = Session::new(30, 100);
-    match refresh_user_session(&mut session, "email", email.clone(), "0") {
+    match refresh_user_session(&mut session, "email", email.clone(), "0").await {
         Some(t) => message(&t),
         None => send_login_email(&mut session).await,
     }
@@ -174,7 +174,7 @@ pub async fn signup(body: HashMap<&str, &str>) -> String {
 pub async fn login(body: HashMap<&str, &str>) -> String {
     let email = body["email"].to_lowercase();
     let mut session = Session::new(30, 100);
-    match refresh_user_session(&mut session, "email", email.clone(), "0") {
+    match refresh_user_session(&mut session, "email", email.clone(), "0").await {
         Some(t) => message(&t),
         None => send_login_email(&mut session).await,
     }
@@ -195,23 +195,23 @@ async fn send_login_email(session: &mut Session) -> String {
     json!({"session" : session.get_id(), "email": email}).to_string()
 }
 
-pub fn admin_login(body: HashMap<&str, &str>) -> String {
+pub async fn admin_login(body: HashMap<&str, &str>) -> String {
     let email = body["email"].to_lowercase();
     let mut session = Session::new(30, 100);
-    match refresh_admin_session(&mut session, "email", email, Some(body["password"])) {
+    match refresh_admin_session(&mut session, "email", email, Some(body["password"])).await {
         Some(t) => message(&t),
         None => json!({"session" : session.get_id()}).to_string(),
     }
 }
 
-fn refresh_user_session(
+async fn refresh_user_session(
     session: &mut Session,
     key: &str,
     value: String,
     verified: &str,
 ) -> Option<String> {
     session.clear();
-    let users = get_like("users", key, &value);
+    let users = get_like("users", key, &value).await;
     if let Some(user) = users.iter().next() {
         session.set("id", from_value::<i32>(user[1].clone()).to_string());
         if verified == "1" {
@@ -231,7 +231,7 @@ fn refresh_user_session(
             None
         }
     } else {
-        let admin = get_like("admin", key, &value);
+        let admin = get_like("admin", key, &value).await;
         if let Some(admin) = admin.iter().next() {
             session
                 .set("id", from_value::<i32>(admin[2].clone()).to_string())
@@ -245,14 +245,14 @@ fn refresh_user_session(
     }
 }
 
-fn refresh_admin_session(
+async fn refresh_admin_session(
     session: &mut Session,
     key: &str,
     value: String,
     password: Option<&str>,
 ) -> Option<String> {
     session.clear();
-    let users = get_like("admin", key, &value);
+    let users = get_like("admin", key, &value).await;
     if let Some(user) = users.iter().next() {
         if let Some(p) = password {
             if !hash_match(p, &from_value::<String>(user[1].clone())) {
@@ -273,7 +273,7 @@ fn refresh_admin_session(
     }
 }
 
-pub fn get_account(body: HashMap<&str, &str>) -> String {
+pub async fn get_account(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("verified").unwrap_or_default() == "1"
             || session.get("admin").unwrap_or_default() == "1"
@@ -291,23 +291,23 @@ pub fn get_account(body: HashMap<&str, &str>) -> String {
     json!({"session" : "none"}).to_string()
 }
 
-pub fn kill_session(body: HashMap<&str, &str>) -> String {
+pub async fn kill_session(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         session.delete();
     }
     json!({}).to_string()
 }
 
-pub fn refresh(body: HashMap<&str, &str>) -> String {
+pub async fn refresh(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         let id = session.get("id").unwrap();
         let verified = &session.get("verified").unwrap();
-        refresh_user_session(&mut session, "id", id, verified).unwrap();
+        refresh_user_session(&mut session, "id", id, verified).await.unwrap();
     }
     json!({}).to_string()
 }
 
-pub fn change_subscription(body: HashMap<&str, &str>) -> String {
+pub async fn change_subscription(body: HashMap<&str, &str>) -> String {
     const SUBSCRIPTION_MESSAGES: &[&str] = &[
         "You are now unsubscribed from receiving emails.",
         "You are now subscribed to receive emails.",
@@ -323,7 +323,7 @@ pub fn change_subscription(body: HashMap<&str, &str>) -> String {
         &session.get("id").unwrap(),
         "subscription_policy",
         body["subscription"],
-    );
+    ).await;
     session.set("subscription_policy", body["subscription"].to_string());
     message(SUBSCRIPTION_MESSAGES[body["subscription"].parse::<usize>().unwrap()])
 }
@@ -348,7 +348,7 @@ pub async fn send_change_email(body: HashMap<&str, &str>) -> String {
     // An email needs to be added to the queue here
     let mut session = Session::from_id(body["session"]).unwrap();
     if session.get("verified").unwrap() == "1" {
-        if let Some(t) = check_email(body["email"]) {
+        if let Some(t) = check_email(body["email"]).await {
             return message(t);
         }
         json!({ "success": true, "email": queue_change_email(&mut session, body["email"]).await }).to_string()
@@ -357,7 +357,7 @@ pub async fn send_change_email(body: HashMap<&str, &str>) -> String {
     }
 }
 
-pub fn change_email(body: HashMap<&str, &str>) -> String {
+pub async fn change_email(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         let admin = session.get("admin").unwrap() == "1";
         if admin || session.get("verified").unwrap() == "1" {
@@ -365,11 +365,11 @@ pub fn change_email(body: HashMap<&str, &str>) -> String {
                 let id = session.get("id").unwrap();
                 let new_email = session.get("new_email").unwrap();
                 if admin {
-                    change_row_where("admin", "id", &id, "email", &new_email);
-                    refresh_admin_session(&mut session, "id", id, None);
+                    change_row_where("admin", "id", &id, "email", &new_email).await;
+                    refresh_admin_session(&mut session, "id", id, None).await;
                 } else {
-                    change_row_where("users", "id", &id, "email", &new_email);
-                    refresh_user_session(&mut session, "id", id, "0");
+                    change_row_where("users", "id", &id, "email", &new_email).await;
+                    refresh_user_session(&mut session, "id", id, "0").await;
                 }
                 return json!({ "success": true }).to_string();
             }
@@ -404,16 +404,16 @@ async fn queue_delete_email(session: &mut Session) -> String {
     email
 }
 
-pub fn delete_account(body: HashMap<&str, &str>) -> String {
+pub async fn delete_account(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         let admin = session.get("admin").unwrap() == "1";
         if admin || session.get("verified").unwrap() == "1" {
             if session.get("delete_code").unwrap() == body["code"] {
                 let id = session.get("id").unwrap();
                 if admin {
-                    delete_row_where("admin", "id", &id);
+                    delete_row_where("admin", "id", &id).await;
                 } else {
-                    delete_row_where("users", "id", &id);
+                    delete_row_where("users", "id", &id).await;
                 }
                 return json!({ "success": true }).to_string();
             }
@@ -422,24 +422,24 @@ pub fn delete_account(body: HashMap<&str, &str>) -> String {
     json!({"success": false}).to_string()
 }
 
-fn get_column_types(table: &str) -> Vec<String> {
+async fn get_column_types(table: &str) -> Vec<String> {
     let mut column_types = Vec::new();
-    for column in get_column_details(table) {
+    for column in get_column_details(table).await {
         column_types.push(from_value::<String>(column[1].clone()));
     }
     column_types
 }
 
-pub fn get_database(body: HashMap<&str, &str>) -> String {
+pub async fn get_database(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
             let mut column_names = Vec::new();
-            for column in get_column_details(body["table"]) {
+            for column in get_column_details(body["table"]).await {
                 column_names.push(from_value::<String>(column[0].clone()));
             }
             let mut processed_rows = Vec::new();
-            let column_types = get_column_types(body["table"]);
-            for row in get_all_rows(body["table"], true) {
+            let column_types = get_column_types(body["table"]).await;
+            for row in get_all_rows(body["table"], true).await {
                 let mut new_row = Vec::new();
                 for i in 0..row.len() {
                     push_value(&column_types[i], row[i].clone(), &mut new_row);
@@ -453,7 +453,7 @@ pub fn get_database(body: HashMap<&str, &str>) -> String {
     json!({"success": false}).to_string()
 }
 
-fn push_value(column_type: &str, value: mysql::Value, vec: &mut Vec<String>) {
+fn push_value(column_type: &str, value: mysql_async::Value, vec: &mut Vec<String>) {
     if column_type.contains("date") {
         vec.push(from_value::<NaiveDate>(value).to_string())
     } else if column_type.contains("int") {
@@ -463,11 +463,11 @@ fn push_value(column_type: &str, value: mysql::Value, vec: &mut Vec<String>) {
     }
 }
 
-pub fn get_row_titles(body: HashMap<&str, &str>) -> String {
+pub async fn get_row_titles(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
             let mut titles: Vec<String> = Vec::new();
-            for title in get_some(body["table"], "title") {
+            for title in get_some(body["table"], "title").await {
                 titles.push(from_value(title[0].clone()));
             }
             return json!({"table" : body["table"], "titles" : titles}).to_string();
@@ -476,38 +476,39 @@ pub fn get_row_titles(body: HashMap<&str, &str>) -> String {
     json!({}).to_string()
 }
 
-fn return_row(table: &str, id: i32) -> Vec<String> {
-    let row = get_like(table, "id", &id.to_string())[0].clone();
+async fn return_row(table: &str, id: i32) -> Vec<String> {
+    let row = get_like(table, "id", &id.to_string()).await[0].clone();
     let mut formatted_row = Vec::new();
-    let column_types = get_column_types(table);
+    let column_types = get_column_types(table).await;
     for i in 0..row.len() {
         push_value(&column_types[i], row[i].clone(), &mut formatted_row);
     }
     formatted_row
 }
 
-pub fn move_row_to_end(body: HashMap<&str, &str>) -> String {
+pub async fn move_row_to_end(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
-            let new_id = get_max_id(body["table"]) + 1;
-            change_row_where(body["table"], "id", body["id"], "id", &new_id.to_string());
+            let new_id = get_max_id(body["table"]).await + 1;
+            change_row_where(body["table"], "id", body["id"], "id", &new_id.to_string()).await;
             let message = format!("Successfully moved row {} to end.", body["id"]);
             return 
-                json!({"success" : true, "message" : message, "row" : return_row(body["table"], new_id), "old_id" : body["id"]}).to_string()
+                json!({"success" : true, "message" : message, "row" : return_row(body["table"], new_id).await, "old_id" : body["id"]}).to_string()
             ;
         }
     }
     json!({}).to_string()
 }
 
-pub fn move_row_to_start(body: HashMap<&str, &str>) -> String {
+pub async fn move_row_to_start(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
-            let new_id = get_min_id(body["table"]) - 1;
-            change_row_where(body["table"], "id", body["id"], "id", &new_id.to_string());
+            let new_id = get_min_id(body["table"]).await - 1;
+            change_row_where(body["table"], "id", body["id"], "id", &new_id.to_string()).await;
             let message = format!("Successfully moved row {} to start.", body["id"]);
+            let row = return_row(body["table"], new_id).await;
             return 
-                json!({"success" : true, "message" : message, "row" : return_row(body["table"], new_id), "old_id" : body["id"]}).to_string();
+                json!({"success" : true, "message" : message, "row" : row, "old_id" : body["id"]}).to_string();
         }
     }
     json!({}).to_string()
@@ -524,7 +525,7 @@ pub async fn delete_row(body: HashMap<&str, &str>) -> String {
                     return json!({"success" : false, "authorized": false}).to_string();
                 }
             } else {
-                delete_row_where(body["table"], "id", body["id"]);
+                delete_row_where(body["table"], "id", body["id"]).await;
                 let message = format!("Successfully deleted row {}.", body["id"]);
                 return json!({"success" : true, "message" : message, "id" : body["id"]}).to_string();
             }
@@ -533,18 +534,19 @@ pub async fn delete_row(body: HashMap<&str, &str>) -> String {
     json!({}).to_string()
 }
 
-pub fn add_row(body: HashMap<&str, &str>) -> String {
+pub async fn add_row(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
             let names = serde_json::from_str(body["names"]).unwrap();
             let values = serde_json::from_str(body["values"]).unwrap();
-            if let Err(e) = insert_row(body["table"], names, values) {
+            if let Err(e) = insert_row(body["table"], names, values).await {
                 return json!({"success" : false, "message" : e}).to_string();
             } else {
-                let row_id = get_max_id(body["table"]);
+                let row_id = get_max_id(body["table"]).await;
                 let message = format!("Successfully added row {}.", row_id);
+                let row = return_row(body["table"], row_id).await;
                 return 
-                    json!({"success" : true, "message" : message, "row" : return_row(body["table"], row_id)}).to_string();
+                    json!({"success" : true, "message" : message, "row" : row}).to_string();
             }
         }
     }
@@ -564,7 +566,7 @@ pub async fn change_row(body: HashMap<&str, &str>) -> String {
                     return json!({"success" : false, "authorized": false}).to_string();
                 }
             }
-            change_row_where(body["table"], "id", body["id"], body["name"], body["value"]);
+            change_row_where(body["table"], "id", body["id"], body["name"], body["value"]).await;
             return json!({
                 "success": true,
                 "message": &format!("Successfully updated row {}.", body["id"])
@@ -597,14 +599,14 @@ pub async fn send_gmail_code(body: HashMap<&str, &str>) -> String {
         if session.get("admin").unwrap() == "1" {
             let refresh_token = gmail::get_refresh_token(body["code"]);
             let email = &session.get("email").unwrap();
-            if row_exists("admin", "email", email) {
-                change_row_where("admin", "email", email, "refresh_token", &refresh_token.await);
+            if row_exists("admin", "email", email).await {
+                change_row_where("admin", "email", email, "refresh_token", &refresh_token.await).await;
             } else {
                 insert_row(
                     "admin",
                     vec!["email", "refresh_token"],
                     vec![email, &refresh_token.await],
-                )
+                ).await
                 .unwrap();
             }
         }
@@ -612,10 +614,10 @@ pub async fn send_gmail_code(body: HashMap<&str, &str>) -> String {
     json!({}).to_string()
 }
 
-pub fn is_gmail_working(body: HashMap<&str, &str>) -> String {
+pub async fn is_gmail_working(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("admin").unwrap() == "1" {
-            if get_refresh_token() != mysql::Value::NULL {
+            if get_refresh_token().await != mysql_async::Value::NULL {
                 return json!({"working": true}).to_string();
             }
         }
@@ -623,11 +625,11 @@ pub fn is_gmail_working(body: HashMap<&str, &str>) -> String {
     json!({"working": false}).to_string()
 }
 
-fn get_refresh_token() -> mysql::Value {
-    let mut return_token = mysql::Value::NULL;
-    for row in get_all_rows("admin", false) {
+async fn get_refresh_token() -> mysql_async::Value {
+    let mut return_token = mysql_async::Value::NULL;
+    for row in get_all_rows("admin", false).await {
         let token = row[4].clone();
-        if token != mysql::Value::Bytes(vec![]) {
+        if token != mysql_async::Value::Bytes(vec![]) {
             return_token = token;
             break;
         }
@@ -637,7 +639,7 @@ fn get_refresh_token() -> mysql::Value {
 
 async fn get_access_token() -> String {
     let refresh_token = get_refresh_token();
-    gmail::get_access_token(&from_value::<String>(refresh_token)).await
+    gmail::get_access_token(&from_value::<String>(refresh_token.await)).await
 }
 
 fn generate_verification_code() -> String {
@@ -660,15 +662,15 @@ pub fn hash_password(body: HashMap<&str, &str>) -> String {
     json!({}).to_string()
 }
 
-pub fn verify_account(body: HashMap<&str, &str>) -> String {
+pub async fn verify_account(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]) {
         if session.get("verified").unwrap() == "0" {
             if session.get("verification_code").unwrap() == body["code"] {
                 let email = session.get("not_verified_email").unwrap();
                 if session.get("not_verified_admin").unwrap_or_default() == "1" {
-                    refresh_admin_session(&mut session, "email", email, None);
+                    refresh_admin_session(&mut session, "email", email, None).await;
                 } else {
-                    refresh_user_session(&mut session, "email", email, "1");
+                    refresh_user_session(&mut session, "email", email, "1").await;
                 }
                 return json!({ "success": true }).to_string();
             }
@@ -682,10 +684,10 @@ pub async fn send_email(body: HashMap<&str, &str>) -> String {
         if session.get("admin").unwrap() == "1" {
             let mut emails = vec![];
             if body["recipients"] == "all_users" {
-                for row in get_some("users", "email") {
+                for row in get_some("users", "email").await {
                     emails.push(from_value::<String>(row[0].clone()));
                 }
-                for row in get_some("admin", "email") {
+                for row in get_some("admin", "email").await {
                     emails.push(from_value::<String>(row[0].clone()));
                 }
             } else {

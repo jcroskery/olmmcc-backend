@@ -1,26 +1,32 @@
-use mysql::{from_value, params, Conn, OptsBuilder, Params, Value};
+use mysql_async::{from_value, params, Conn, Params, Value};
+use mysql_async::prelude::Queryable;
 
-pub fn get_like(table: &str, column_name: &str, column_value: &str) -> Vec<Vec<Value>> {
+const URL: &str = "mysql://justus:@localhost:3306/olmmcc";
+
+pub async fn get_like(table: &str, column_name: &str, column_value: &str) -> Vec<Vec<Value>> {
     let checked_table = check_table(table).unwrap();
-    mysql_statement(
-        format!(
+    let query = format!(
             "SELECT * FROM {} WHERE {} LIKE :value",
             checked_table, column_name
-        ),
+        );
+    mysql_statement(
+        query,
         params!("value" => column_value),
-    )
+    ).await
     .unwrap()
 }
 
-pub fn get_some(table: &str, values: &str) -> Vec<Vec<Value>> {
+pub async fn get_some(table: &str, values: &str) -> Vec<Vec<Value>> {
     let checked_table = check_table(table).unwrap();
-    mysql_statement(format!("SELECT ({}) FROM {}", values, checked_table), ()).unwrap()
+    let query = format!("SELECT ({}) FROM {}", values, checked_table);
+    mysql_statement(query, ()).await.unwrap()
 }
 
-pub fn get_all_rows(table: &str, order: bool) -> Vec<Vec<Value>> {
+pub async fn get_all_rows(table: &str, order: bool) -> Vec<Vec<Value>> {
     let checked_table = check_table(table).unwrap();
     let order = if order { " ORDER BY id" } else { "" };
-    mysql_statement(format!("SELECT * FROM {}{}", checked_table, order), ()).unwrap()
+    let query = format!("SELECT * FROM {}{}", checked_table, order);
+    mysql_statement(query, ()).await.unwrap()
 }
 
 fn check_table(table: &str) -> Option<&str> {
@@ -33,30 +39,26 @@ fn check_table(table: &str) -> Option<&str> {
     None
 }
 
-pub fn get_column_details(table: &str) -> Vec<Vec<Value>> {
+pub async fn get_column_details(table: &str) -> Vec<Vec<Value>> {
     let checked_table = check_table(table).unwrap();
-    mysql_statement(format!("SHOW COLUMNS FROM {}", checked_table), ()).unwrap()
+    let query = format!("SHOW COLUMNS FROM {}", checked_table);
+    mysql_statement(query, ()).await.unwrap()
 }
 
-pub fn mysql_statement<T: Into<Params>>(
+pub async fn mysql_statement<T: Into<Params>>(
     request: String,
     params: T,
 ) -> Result<Vec<Vec<Value>>, String> {
-    let mut builder = OptsBuilder::new();
-    builder
-        .db_name(Some("olmmcc"))
-        .user(Some("justus"))
-        .pass(Some(""));
-    let mut conn = Conn::new(builder).unwrap();
-    let result = conn.prep_exec(request, params);
+    let conn = Conn::new(URL).await.unwrap();
+    let result = conn.prep_exec(request, params).await;
     match result {
-        Ok(r) => Ok(r.map(|row| row.unwrap().unwrap()).collect()),
+        Ok(r) => Ok(r.map(|row| row.unwrap()).await.unwrap().1),
         Err(r) => Err(format!("{}", r)),
     }
 }
 
-pub fn row_exists(table: &str, column_name: &str, column_value: &str) -> bool {
-    let result = get_like(table, column_name, column_value);
+pub async fn row_exists(table: &str, column_name: &str, column_value: &str) -> bool {
+    let result = get_like(table, column_name, column_value).await;
     for vec in result {
         for _ in vec {
             return true;
@@ -65,21 +67,22 @@ pub fn row_exists(table: &str, column_name: &str, column_value: &str) -> bool {
     false
 }
 
-pub fn insert_row(table: &str, titles: Vec<&str>, contents: Vec<&str>) -> Result<(), String> {
+pub async fn insert_row(table: &str, titles: Vec<&str>, contents: Vec<&str>) -> Result<(), String> {
     let checked_table = check_table(table).unwrap();
-    mysql_statement(
-        format!(
+    let query = format!(
             "INSERT INTO {} ({}) VALUES ({}?)",
             checked_table,
             titles.join(", "),
             "?,".to_string().repeat(titles.len() - 1)
-        ),
+        );
+    mysql_statement(
+        query,
         Params::from(contents),
-    )?;
+    ).await?;
     Ok(())
 }
 
-pub fn change_row_where(table: &str, where_name: &str, wherevalue: &str, name: &str, value: &str) {
+pub async fn change_row_where(table: &str, where_name: &str, wherevalue: &str, name: &str, value: &str) {
     let checked_table = check_table(table).unwrap();
     mysql_statement(
         format!(
@@ -87,19 +90,19 @@ pub fn change_row_where(table: &str, where_name: &str, wherevalue: &str, name: &
             checked_table, name, where_name
         ),
         params!(value, wherevalue),
-    )
+    ).await
     .unwrap();
 }
 
-pub fn get_max_id(table: &str) -> i32 {
-    from_value(mysql_statement(format!("SELECT MAX(id) FROM {}", table), ()).unwrap()[0][0].clone())
+pub async fn get_max_id(table: &str) -> i32 {
+    from_value(mysql_statement(format!("SELECT MAX(id) FROM {}", table), ()).await.unwrap()[0][0].clone())
 }
 
-pub fn get_min_id(table: &str) -> i32 {
-    from_value(mysql_statement(format!("SELECT MIN(id) FROM {}", table), ()).unwrap()[0][0].clone())
+pub async fn get_min_id(table: &str) -> i32 {
+    from_value(mysql_statement(format!("SELECT MIN(id) FROM {}", table), ()).await.unwrap()[0][0].clone())
 }
 
-pub fn delete_row_where(table: &str, where_name: &str, wherevalue: &str) {
+pub async fn delete_row_where(table: &str, where_name: &str, wherevalue: &str) {
     let checked_table = check_table(table).unwrap();
     mysql_statement(
         format!(
@@ -107,6 +110,6 @@ pub fn delete_row_where(table: &str, where_name: &str, wherevalue: &str) {
             checked_table, where_name
         ),
         params!(wherevalue),
-    )
+    ).await
     .unwrap();
 }
