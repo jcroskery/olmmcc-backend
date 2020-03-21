@@ -7,7 +7,7 @@ pub fn check_password(password: &str) -> Option<&'static str> {
 }
 pub async fn check_email(email: &str) -> Option<&str> {
     if email.len() <= 64 {
-        if let None = super::database_functions::get_like("users", "email", email).await.get(0) {
+        if let None = mysql::get_like("users", "email", email).await.get(0) {
             None
         } else {
             Some("Sorry, your email address has already been registered. Please use a different email address or log in with your account.")
