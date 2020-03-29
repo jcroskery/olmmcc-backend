@@ -148,7 +148,7 @@ pub async fn get_calendar_events(body: HashMap<&str, &str>) -> String {
                 .to_string(),
             start_time: from_value(x[3].clone()),
             end_time: from_value(x[4].clone()),
-            notes: from_value(x[5].clone()),
+            notes: from_value(x[6].clone()),
         })
         .collect();
     serde_json::to_string(&result).unwrap()
