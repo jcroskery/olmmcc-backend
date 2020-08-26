@@ -188,7 +188,7 @@ async fn send_login_email(session: &mut Session) -> String {
     session
         .set("verification_code", verification_code.clone())
         .await;
-    let access_token = get_access_token().await;
+    let access_token = get_access_token().await.unwrap();
     let body = format!("Hello,\r\nTo verify your identity, please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you received it in error please contact justus@olmmcc.tk", verification_code);
     gmail::send_email(
         vec![email.clone()],
@@ -366,7 +366,7 @@ async fn queue_change_email(session: &mut Session, new_email: &str) -> String {
         .await;
     session.set("new_email", new_email.to_string()).await;
     let body = format!("Hello,\r\nYou requested a change of your email address to {}. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", new_email, email_change_code);
-    let access_token = get_access_token().await;
+    let access_token = get_access_token().await.unwrap();
     gmail::send_email(
         vec![email.clone()],
         "Verify your Email Change Request",
@@ -430,7 +430,7 @@ async fn queue_delete_email(session: &mut Session) -> String {
     let delete_code = generate_verification_code();
     session.set("delete_code", delete_code.clone()).await;
     let body = format!("Hello,\r\nYou requested a deletion of your OLMMCC account. Please copy this code and return to OLMMCC's website: {}\r\n\r\nThis message was sent by the OLMMCC automated system. If you did not make this request please contact justus@olmmcc.tk", delete_code);
-    let access_token = get_access_token().await;
+    let access_token = get_access_token().await.unwrap();
     gmail::send_email(
         vec![email.clone()],
         "Verify your Account Deletion Request",
@@ -667,7 +667,9 @@ pub async fn is_gmail_working(body: HashMap<&str, &str>) -> String {
     if let Some(mut session) = Session::from_id(body["session"]).await {
         if session.get("admin").await.unwrap() == "1" {
             if get_refresh_token().await.is_some() {
-                return json!({"working": true}).to_string();
+                if get_access_token().await.is_some() {
+                    return json!({"working": true}).to_string();
+                }
             }
         }
     }
@@ -686,7 +688,7 @@ async fn get_refresh_token() -> Option<MyValue> {
     return_token
 }
 
-async fn get_access_token() -> String {
+async fn get_access_token() -> Option<String> {
     let refresh_token = get_refresh_token();
     gmail::get_access_token(&from_value::<String>(refresh_token.await.unwrap().get())).await
 }
@@ -746,7 +748,7 @@ pub async fn send_email(body: HashMap<&str, &str>) -> String {
                 emails,
                 body["subject"],
                 body["body"],
-                get_access_token().await.as_str(),
+                get_access_token().await.unwrap().as_str(),
             )
             .await;
             return json!({ "success": true }).to_string();
