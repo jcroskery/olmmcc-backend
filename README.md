@@ -1,4 +1,4 @@
-# api.olmmcc.tk
+# olmmcc-backend
 The backend api for olmmcc.tk
 
 ## License
